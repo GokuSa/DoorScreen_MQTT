@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools">
+    <data>
+        <variable
+            name="patient"
+            type="shine.com.doorscreen.mqtt.bean.Patient"/>
+    </data>
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="6px"
+        android:paddingLeft="4px"
+        android:paddingRight="8px"
+        android:paddingTop="6px">
+
+        <TextView
+            android:id="@+id/tv_bedroom_number"
+            android:layout_width="144px"
+            android:layout_height="144px"
+            android:background="@drawable/bg_paient_bedroom"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="48px"
+            android:text="@{patient.bedno}"
+            tools:text="1101\n床"/>
+
+        <TextView
+            android:id="@+id/tv_patient_detail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginLeft="16px"
+            android:textSize="42px"
+            android:text="@{patient.patientname}"
+            tools:text="正在呼叫"
+            tools:textColor="@color/color_orange"/>
+    </LinearLayout>
+
+</layout>

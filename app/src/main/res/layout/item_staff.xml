@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
+        xmlns:app="http://schemas.android.com/apk/res-auto">
+    <data>
+        <variable
+            name="staff"
+            type="shine.com.doorscreen.mqtt.bean.Staff"/>
+    </data>
+    <LinearLayout
+
+        android:layout_width="266px"
+        android:layout_height="320px"
+        android:background="@drawable/bg_general"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="16px">
+
+        <TextView
+            android:id="@+id/tv_doctor_title"
+            android:layout_width="198px"
+            android:layout_height="64px"
+            android:background="@drawable/selector_drip_doctor"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="32px"
+            android:text="@{staff.title}"
+            tools:text="主治医生"/>
+
+        <ImageView
+            android:id="@+id/iv_avatar"
+            android:layout_width="143px"
+            android:layout_height="183px"
+            app:showImage="@{staff.img}"
+            tools:src="@mipmap/ic_launcher"/>
+
+        <TextView
+            android:id="@+id/tv_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/color_background_main"
+            android:textSize="28px"
+            android:text="@{staff.name}"
+            tools:text="李医生"/>
+    </LinearLayout>
+
+</layout>

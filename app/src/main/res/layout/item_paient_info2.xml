@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="patient"
+            type="shine.com.doorscreen.mqtt.bean.Patient"/>
+    </data>
+
+    <RelativeLayout
+
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingLeft="8px"
+        android:paddingRight="8px"
+        android:paddingTop="14px"
+        >
+
+        <TextView
+            android:id="@+id/tv_bedroom_number"
+            android:layout_width="150px"
+            android:layout_height="150px"
+            android:background="#0abaca"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="48px"
+            android:text="@{patient.bedno}"
+            tools:text="1101\n床"/>
+
+        <TextView
+            android:id="@+id/tv_doctor_title"
+            android:layout_width="240px"
+            android:layout_height="75px"
+            android:layout_toRightOf="@id/tv_bedroom_number"
+            android:background="#88dee4"
+            android:gravity="center"
+            android:text="@string/main_doctor"
+            android:textColor="#004d52"
+            android:textSize="42px"/>
+
+        <TextView
+            android:id="@+id/tv_doctor_name"
+            android:layout_width="240px"
+            android:layout_height="75px"
+            android:layout_below="@id/tv_doctor_title"
+            android:layout_toRightOf="@id/tv_bedroom_number"
+            android:background="#6bd7dd"
+            android:gravity="center"
+            android:textColor="#004d52"
+            android:textSize="42px"
+            android:text="@{patient.doctorname}"
+            tools:text="张三"/>
+    </RelativeLayout>
+
+</layout>
