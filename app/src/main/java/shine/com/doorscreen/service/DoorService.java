@@ -30,6 +30,8 @@ import shine.com.doorscreen.mqtt.bean.SystemLight;
 import shine.com.doorscreen.util.RootCommand;
 import shine.com.doorscreen.util.SharePreferenceUtil;
 
+import static shine.com.doorscreen.activity.MainActivity.CALL_OFF;
+import static shine.com.doorscreen.activity.MainActivity.CALL_ON;
 import static shine.com.doorscreen.activity.MainActivity.CLOSE;
 import static shine.com.doorscreen.activity.MainActivity.DOWNLOAD_DONE;
 import static shine.com.doorscreen.activity.MainActivity.MARQUEE_STOP;
@@ -103,6 +105,7 @@ public class DoorService extends Service implements Handler.Callback {
     private A64Utility mA64Utility;
     // 格式化开关机时间
     private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -143,11 +146,11 @@ public class DoorService extends Service implements Handler.Callback {
         mVolumeNightHour = volumnParam[4];
         mVolumeNightMinute = volumnParam[5];
 
-        int[] displayTime = SharePreferenceUtil.getDisplayTime(this);
+      /*  int[] displayTime = SharePreferenceUtil.getDisplayTime(this);
         mOpenScreenHour = displayTime[0];
         mOpenScreenMinute = displayTime[1];
         mCloseScreenHour = displayTime[2];
-        mCloseScreenMinute = displayTime[3];
+        mCloseScreenMinute = displayTime[3];*/
 
         HandlerThread handlerThread = new HandlerThread("door_service");
         handlerThread.start();
@@ -168,7 +171,8 @@ public class DoorService extends Service implements Handler.Callback {
             }
         }, 10 * 1000);
         mA64Utility = new A64Utility();
-        onOffScreen();
+//        onOffScreen();
+        executeScreenOnOff();
     }
 
     @Override
@@ -176,16 +180,15 @@ public class DoorService extends Service implements Handler.Callback {
         final int action = intent.getIntExtra(ACTION, -1);
         switch (action) {
             case SCREEN_SWITCH:
+                mHandler.sendEmptyMessage(SWITCH_SCREEN);
+                break;
             case VOLUME_SWITCH:
                 final String json = intent.getStringExtra(DATA);
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (action == SCREEN_SWITCH) {
-                            saveSystemLight(json);
-                        } else if (action == VOLUME_SWITCH) {
-                            saveSystemVolume(json);
-                        }
+                        saveSystemVolume(json);
+
                     }
                 });
                 break;
@@ -213,6 +216,19 @@ public class DoorService extends Service implements Handler.Callback {
             case REMOVE_CLOSE:
                 mHandler.removeCallbacks(mShunDown);
                 break;
+            //处理系统呼叫，如果在关屏状态需要开屏
+            case CALL_ON:
+                if (!ScreenManager.getInstance(this).isScreenOn()) {
+                    mA64Utility.OpenScreen();
+                }
+                break;
+            //呼叫结束，如果之前是关屏状态要恢复
+            case CALL_OFF:
+                if (!ScreenManager.getInstance(this).isScreenOn()) {
+                    mA64Utility.CloseScreen();
+                }
+                break;
+
         }
 
         return START_NOT_STICKY;
@@ -236,7 +252,8 @@ public class DoorService extends Service implements Handler.Callback {
     public boolean handleMessage(Message msg) {
         switch (msg.what) {
             case SWITCH_SCREEN:
-                onOffScreen();
+//                onOffScreen();
+                executeScreenOnOff();
                 break;
             //每一分钟从数据库检索一次合适的多媒体素材
             case SCAN_MEDIA:
@@ -251,7 +268,6 @@ public class DoorService extends Service implements Handler.Callback {
         }
         return true;
     }
-
 
 
     /**
@@ -360,7 +376,7 @@ public class DoorService extends Service implements Handler.Callback {
      * @param json 后台发来的数据，数据比较冗余，只取关键数据
      *             SystemVolume和SystemLight数据一样
      */
-    private void saveSystemVolume(String json){
+    private void saveSystemVolume(String json) {
         try {
             SystemInfo systemVolume = new Gson().fromJson(json, SystemInfo.class);
             if (systemVolume != null) {
@@ -405,6 +421,7 @@ public class DoorService extends Service implements Handler.Callback {
      * 目前仅开关屏时间
      * 使用集合中的最后一个数据即可
      */
+    @Deprecated
     private void saveSystemLight(String json) {
         Log.d(TAG, "saveSystemLight");
         SystemLight lightParam = new Gson().fromJson(json, SystemLight.class);
@@ -423,14 +440,29 @@ public class DoorService extends Service implements Handler.Callback {
         SharePreferenceUtil.saveDisplayTime(this, mOpenScreenHour, mOpenScreenMinute, mCloseScreenHour, mCloseScreenMinute);
         //取消之前的设置
         mHandler.removeMessages(SWITCH_SCREEN);
-        onOffScreen();
-
+//        onOffScreen();
     }
 
+
+    private void executeScreenOnOff() {
+        ScreenManager screenManager = ScreenManager.getInstance(this);
+        screenManager.scheduleScreenOnOff();
+        if (screenManager.isScreenOn()) {
+            mA64Utility.OpenScreen();
+        } else {
+            mA64Utility.CloseScreen();
+        }
+        //根据计算结果安排下次开关屏
+        mHandler.removeMessages(MainActivity.SWITCH_SCREEN);
+        mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SCREEN, screenManager.getOperationDelay());
+
+
+    }
 
     /**
      * 设置开关屏时间,在开屏时间类开屏，否则就关屏
      */
+    @Deprecated
     private void onOffScreen() {
         Calendar calendar = Calendar.getInstance();
         long current = calendar.getTimeInMillis();
@@ -475,7 +507,7 @@ public class DoorService extends Service implements Handler.Callback {
         }
     }
 
-    private Runnable mShunDown=new Runnable() {
+    private Runnable mShunDown = new Runnable() {
         @Override
         public void run() {
             Log.d(TAG, "执行关机");

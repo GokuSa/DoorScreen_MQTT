@@ -109,6 +109,8 @@ public class MainActivity extends AppCompatActivity implements DataReceiveListen
     public static final int PUSHPOSITION = 55;
     public static final int CLOSE = 55;
     public static final int REMOVE_CLOSE = 56;
+    public static final int CALL_ON = 57;
+    public static final int CALL_OFF = 58;
     //视频和图片目录
     private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
     private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);

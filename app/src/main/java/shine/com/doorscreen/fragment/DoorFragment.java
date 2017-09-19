@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Locale;
 
 import shine.com.doorscreen.R;
-import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.adapter.DripAdapter;
 import shine.com.doorscreen.adapter.InsetDecoration;
 import shine.com.doorscreen.adapter.PatientAdapter2;
@@ -139,13 +138,13 @@ public class DoorFragment extends LifecycleFragment {
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated() called with");
         mMarqueeView = (MarqueeView) view.findViewById(R.id.marqueeView);
-        mBinding.tvTitle.setOnClickListener(new View.OnClickListener() {
+       /* mBinding.tvTitle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 MainActivity activity = (MainActivity) getActivity();
                 activity.handleCallTransfer("",true);
             }
-        });
+        });*/
         isPrepared = true;
     }
 
