@@ -54,9 +54,12 @@ import shine.com.doorscreen.mqtt.bean.WatchTime;
 import shine.com.doorscreen.service.DoorLightHelper;
 import shine.com.doorscreen.service.DoorService;
 import shine.com.doorscreen.service.ScreenManager;
+import shine.com.doorscreen.service.VolumeManager;
+import shine.com.doorscreen.util.Common;
 import shine.com.doorscreen.util.IniReaderNoSection;
 import shine.com.doorscreen.util.RootCommand;
 
+import static java.lang.Integer.parseInt;
 import static shine.com.doorscreen.activity.MainActivity.MARQUEE_STOP;
 import static shine.com.doorscreen.activity.MainActivity.MARQUEE_UPDATE;
 import static shine.com.doorscreen.util.Common.getMacAddress;
@@ -161,6 +164,7 @@ public class MQTTClient {
         }
         return Base64.encodeToString(raw.getBytes(), Base64.DEFAULT);
     }
+
     /**
      * 生成门口屏订阅的主题
      *
@@ -281,7 +285,7 @@ public class MQTTClient {
 
         @Override
         public void messageArrived(String topic, MqttMessage message) throws Exception {
-            final String receive = new String(Base64.decode(message.getPayload(),Base64.DEFAULT));
+            final String receive = new String(Base64.decode(message.getPayload(), Base64.DEFAULT));
             Log.d(TAG, "from topic:" + topic + "  Incoming message: " + receive);
             final JSONObject jsonObject = new JSONObject(receive);
             final String action = jsonObject.optString("action");
@@ -384,7 +388,8 @@ public class MQTTClient {
                     break;
                 case "acceptsystemvolume":
                     if (13 == jsonObject.optInt("clienttype")) {
-                        DoorService.startService(mContext, MainActivity.VOLUME_SWITCH, receive);
+                        handleVolumeSet(receive);
+//                        DoorService.startService(mContext, MainActivity.VOLUME_SWITCH, receive);
                     }
                     break;
                 case "reboot":
@@ -416,8 +421,10 @@ public class MQTTClient {
                 //更新病房名称
                 case "updatename":
                     String roomName = jsonObject.optString("roomname");
-                    mWard.setRoomname(roomName);
-                    mWardDataBase.ward().insert(mWard);
+                    if (!TextUtils.isEmpty(roomName)) {
+                        mWard.setRoomname(roomName);
+                        mWardDataBase.ward().insert(mWard);
+                    }
                     break;
                 case "marqueeinfo":
                     handleMarqueeInfo(receive);
@@ -440,6 +447,53 @@ public class MQTTClient {
 
         }
     };
+
+    /**
+     * 处理音量设置
+     *
+     * @param json
+     */
+    private void handleVolumeSet(String json) {
+        try {
+            SystemInfo systemVolume = new Gson().fromJson(json, SystemInfo.class);
+            if (systemVolume != null) {
+                List<SystemLight> list = systemVolume.getDatalist();
+                if (list != null && list.size() > 1) {
+                    //这个只用来获取晚上音量
+                    SystemLight volumeNight = list.get(0);
+                    //最后一个数据有白天，晚上的分割点，及音量
+                    SystemLight volumeDay = list.get(list.size() - 1);
+                    int mVolumeNight = volumeNight.getValue();
+                    int mVolumeDay = volumeDay.getValue();
+                    Log.d(TAG, "volumeNightValue:" + mVolumeNight+"volumeDayValue:" + mVolumeDay);
+                    int mVolumeDayHour = 0;
+                    int mVolumeDayMinute = 0;
+                    int mVolumeNightHour = 0;
+                    int mVolumeNightMinute = 0;
+
+                    String[] start = volumeDay.getStart().split(":");
+                    if (start.length > 1) {
+                        mVolumeDayHour = parseInt(start[0]);
+                        mVolumeDayMinute = parseInt(start[1]);
+                        Log.d(TAG, "volumeDayPoint:" + mVolumeDayHour + "-" + mVolumeDayMinute);
+                    }
+                    String[] end = volumeDay.getStop().split(":");
+                    if (end.length > 1) {
+                        mVolumeNightHour = parseInt(end[0]);
+                        mVolumeNightMinute = parseInt(end[1]);
+                        Log.d(TAG, "volumeNightPoint:" + mVolumeNightHour + "--" + mVolumeNightMinute);
+                    }
+                    VolumeManager.getInstance(mContext).saveVolumeParam(mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
+                            mVolumeNightHour, mVolumeNightMinute);
+                   DoorService.startService(mContext,MainActivity.VOLUME_SWITCH,"");
+
+                }
+            }
+
+        } catch (JsonSyntaxException |NumberFormatException e) {
+            e.printStackTrace();
+        }
+    }
 
     //通知后台呼叫状态，方便调整开关屏
     private void notifyCallOnOff(boolean callOn) {
@@ -470,13 +524,13 @@ public class MQTTClient {
                     int closeScreenHour = 0;
                     int closeScreenMinute = 0;
                     if (start.length > 1) {
-                        openScreenHour = Integer.parseInt(start[0]);
-                        openScreenMinute = Integer.parseInt(start[1]);
+                        openScreenHour = parseInt(start[0]);
+                        openScreenMinute = parseInt(start[1]);
                     }
                     String[] end = lightParam.getStop().split(":");
                     if (end.length > 1) {
-                        closeScreenHour = Integer.parseInt(end[0]);
-                        closeScreenMinute = Integer.parseInt(end[1]);
+                        closeScreenHour = parseInt(end[0]);
+                        closeScreenMinute = parseInt(end[1]);
                     }
                     //保存到本地
                     ScreenManager.getInstance(mContext)
@@ -538,7 +592,7 @@ public class MQTTClient {
     }
 
     //处理病室患者信息的更新
-    private void handleSynPatient(String receive) {
+    private void  handleSynPatient(String receive) {
         try {
             SynPatient synPatient = mGson.fromJson(receive, SynPatient.class);
             if (synPatient != null) {
@@ -755,6 +809,8 @@ public class MQTTClient {
         return doorLightType;
     }
 
+
+
     /**
      * 更新数据库信息
      *
@@ -770,6 +826,10 @@ public class MQTTClient {
                 String result = patient.getBedno().replace("床", "\n床");
                 patient.setBedno(result);
             }
+            //使用正则提取第一个数字字符串,转化成数字用来排序，没有数字就是-1
+            int bedNum = Common.getNumbers(patient.getBedno());
+            patient.setBedNum(bedNum);
+
         }
         mWardDataBase.patient().insertAll(patientlist);
 
@@ -836,7 +896,7 @@ public class MQTTClient {
      */
     private void subscribeToTopic(final String subscriptionTopic, final boolean needPublish) {
         try {
-            mqttAndroidClient.subscribe(subscriptionTopic , mQos, null, new IMqttActionListener() {
+            mqttAndroidClient.subscribe(subscriptionTopic, mQos, null, new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
                     Log.d(TAG, "subscribeToTopic:" + subscriptionTopic);
@@ -868,7 +928,7 @@ public class MQTTClient {
     private void publishMessage(String publishMessage, String publishTopic) {
         try {
             mqttAndroidClient.publish(publishTopic,
-                  Base64.encode(publishMessage.getBytes(), android.util.Base64.DEFAULT), mQos, mRetained);
+                    Base64.encode(publishMessage.getBytes(), android.util.Base64.DEFAULT), mQos, mRetained);
             Log.d(TAG, "publishMessage " + publishMessage + "\npublishTopic " + publishTopic);
            /* if (!mqttAndroidClient.isConnected()) {
                 Log.d(TAG, mqttAndroidClient.getBufferedMessageCount() + " messages in buffer.");

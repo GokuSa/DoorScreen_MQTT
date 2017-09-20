@@ -26,11 +26,8 @@ import shine.com.doorscreen.adapter.DoorInfoPagerAdapter;
 import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.customview.CustomViewPager;
 import shine.com.doorscreen.database.DoorScreenDataBase;
-import shine.com.doorscreen.entity.DripInfo;
 import shine.com.doorscreen.entity.Elements;
 import shine.com.doorscreen.entity.PushMission;
-import shine.com.doorscreen.entity.StopDrip;
-import shine.com.doorscreen.entity.StopMessage;
 import shine.com.doorscreen.fragment.CallTransferDialog;
 import shine.com.doorscreen.fragment.DoorFragment;
 import shine.com.doorscreen.fragment.MediaFragment;
@@ -38,7 +35,6 @@ import shine.com.doorscreen.fragment.WaitingDialog;
 import shine.com.doorscreen.mqtt.MQTTClient;
 import shine.com.doorscreen.service.DoorService;
 import shine.com.doorscreen.service.DownLoadService;
-import shine.com.doorscreen.tcp.DataReceiveListener;
 import shine.com.doorscreen.util.Common;
 import shine.com.doorscreen.util.IniReaderNoSection;
 
@@ -70,7 +66,7 @@ import shine.com.doorscreen.util.IniReaderNoSection;
  * <p>
  * 此页面是MQTT通信与具体业务逻辑的中间桥梁
  */
-public class MainActivity extends AppCompatActivity implements DataReceiveListener, MQTTClient.MqttListener {
+public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttListener {
     private static final String TAG = "MainActivity";
     //宣教信息下載廣播action
     public static final String MEDIA_ACTION = "com.action.media";
@@ -94,7 +90,7 @@ public class MainActivity extends AppCompatActivity implements DataReceiveListen
     public static final int VOLUME_SWITCH = 13;
     public static final int REBOOT = 14;
     public static final int VOLUME_SET = 20;
-    public static final int SWITCH_SCREEN = 23;
+    public static final int SWITCH_SET = 23;
     public static final int DOWNLOAD_DONE = 40;
     public static final int DRIP_DONE = 42;
     public static final int SCAN_MEDIA = 45;
@@ -223,58 +219,7 @@ public class MainActivity extends AppCompatActivity implements DataReceiveListen
         }
     }
 
-    /**
-     * @param type 监听类型，目前统一在MainActivity监听后台发来的信息 没有其他类型
-     * @param json 从后台发来的数据
-     */
-    @Override
-    public void onDataReceive(int type, String json) {
-        switch (type) {
 
-            //下載宣教信息
-            case MEDIA_DOWNLOAD:
-                if (mFileMovies.exists() && mFilePicture.exists()) {
-                    Log.d(TAG, "begin to download media");
-                    PushMission pushMission = mGson.fromJson(json, PushMission.class);
-                    if (pushMission != null && pushMission.getId() > 0) {
-                        updateLocalMedia(pushMission);
-                    }
-                } else {
-                    Log.e(TAG, "宣教信息目录不存在");
-                }
-                break;
-            case MEDIA_STOP:
-                StopMessage stopMediaMessage = mGson.fromJson(json, StopMessage.class);
-                if (stopMediaMessage != null && stopMediaMessage.getId() > 0) {
-                    Log.d(TAG, "stop media:" + stopMediaMessage);
-                    DoorScreenDataBase.getInstance(this).updateMediaStaus(stopMediaMessage.getId());
-                    //通知后台重新检索
-                    Intent intent = DoorService.newIntent(this, MEDIA_STOP, "");
-                    startService(intent);
-                }
-                break;
-            case MEDIA_DELETE:
-                StopMessage deleteMediaMessage = mGson.fromJson(json, StopMessage.class);
-                if (deleteMediaMessage != null && deleteMediaMessage.getId() > 0) {
-                    Log.d(TAG, "delete media:" + deleteMediaMessage);
-                    DoorScreenDataBase.getInstance(this).deleteMedia(deleteMediaMessage.getId());
-                    //通知后台重新检索
-                    Intent intent = DoorService.newIntent(this, MEDIA_DELETE, "");
-                    startService(intent);
-                }
-                break;
-            case DRIP_UPDATE:
-                DripInfo dripInfo = mGson.fromJson(json, DripInfo.class);
-                mDoorFragment.startDrip(dripInfo);
-                break;
-            case STOP_DRIP:
-                StopDrip stopDrip = mGson.fromJson(json, StopDrip.class);
-                if (stopDrip != null) {
-                    mDoorFragment.stopDrip(stopDrip.getBedno());
-                }
-                break;
-        }
-    }
 
 
     /**

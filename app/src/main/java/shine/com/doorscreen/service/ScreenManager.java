@@ -3,7 +3,6 @@ package shine.com.doorscreen.service;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
-import android.support.annotation.NonNull;
 import android.util.Log;
 
 import java.text.SimpleDateFormat;
@@ -50,24 +49,7 @@ public class ScreenManager {
         return sScreenManager;
     }
 
-    /**
-     * 获取开关屏参数
-     * 默认全天开屏
-     * 00：01 开屏
-     * 23：59关屏
-     *
-     * @param context
-     * @return
-     */
-    public int[] getDisplayTime(@NonNull Context context) {
-        int[] param = new int[4];
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        param[0] = preferences.getInt("open_hour", 0);
-        param[1] = preferences.getInt("open_min", 1);
-        param[2] = preferences.getInt("close_hour", 23);
-        param[3] = preferences.getInt("close_min", 59);
-        return param;
-    }
+
 
     /**
      * 保存开关屏时间点
@@ -88,6 +70,8 @@ public class ScreenManager {
 
     /**
      * 计算开关机时间
+     * light_value>0 表示开屏  发来的时间节点为开屏的起始和结束点
+     * light_value=0 表示关屏  发来的时间节点为关屏的起始和结束点
      */
     public void scheduleScreenOnOff() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
@@ -95,8 +79,8 @@ public class ScreenManager {
         int startMin = preferences.getInt("start_min", 1);
         int endHour = preferences.getInt("end_hour", 23);
         int endMin = preferences.getInt("end_min", 59);
-        int ligth_value = preferences.getInt("light_value", 1);
-        Log.d(TAG, "ligth_value:" + ligth_value);
+        int light_value = preferences.getInt("light_value", 1);
+        Log.d(TAG, "ligth_value:" + light_value);
         Calendar calendar = Calendar.getInstance();
         long current = calendar.getTimeInMillis();
         Log.d(TAG, "当前时间为：" + mDateFormat.format(current));
@@ -116,18 +100,18 @@ public class ScreenManager {
         //如果还没到开始几点
         if (current < startTime) {
             //light vaule>0，startTime是开屏起始，没到就是关屏状态，反过来就是开屏状态
-            mScreenStatus = ligth_value>0?SCREEN_OFF:SCREEN_ON;
+            mScreenStatus = light_value>0?SCREEN_OFF:SCREEN_ON;
             mOperationDelay = startTime - current;
             Log.d(TAG, "下个状态执行延迟" + mOperationDelay);
         } else if (current >= startTime && current < endTime) {
             //如果在时间里,就是light vaule的状态
-            mScreenStatus = ligth_value>0?SCREEN_ON:SCREEN_OFF;
+            mScreenStatus = light_value>0?SCREEN_ON:SCREEN_OFF;
             mOperationDelay = endTime - current;
             Log.d(TAG, "下个状态执行延迟" + mOperationDelay);
         } else {
 //            mScreenStatus = SCREEN_OFF;
             //过了结束时间点，状态翻转
-            mScreenStatus = ligth_value>0?SCREEN_OFF:SCREEN_ON;
+            mScreenStatus = light_value>0?SCREEN_OFF:SCREEN_ON;
             //设置明天状态，前提是后设置开始时间点
             calendar.add(Calendar.DAY_OF_MONTH, 1);
             mOperationDelay = calendar.getTimeInMillis() - current;

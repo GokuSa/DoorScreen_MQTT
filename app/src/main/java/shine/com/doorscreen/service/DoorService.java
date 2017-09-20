@@ -3,7 +3,6 @@ package shine.com.doorscreen.service;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.media.AudioManager;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -11,24 +10,17 @@ import android.os.Message;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 import com.shine.utilitylib.A64Utility;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.List;
 import java.util.Locale;
 
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.database.DoorScreenDataBase;
-import shine.com.doorscreen.mqtt.bean.SystemInfo;
-import shine.com.doorscreen.mqtt.bean.SystemLight;
 import shine.com.doorscreen.util.RootCommand;
-import shine.com.doorscreen.util.SharePreferenceUtil;
 
 import static shine.com.doorscreen.activity.MainActivity.CALL_OFF;
 import static shine.com.doorscreen.activity.MainActivity.CALL_ON;
@@ -45,7 +37,7 @@ import static shine.com.doorscreen.activity.MainActivity.SCAN_MARQUEE_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCREEN_SWITCH;
-import static shine.com.doorscreen.activity.MainActivity.SWITCH_SCREEN;
+import static shine.com.doorscreen.activity.MainActivity.SWITCH_SET;
 import static shine.com.doorscreen.activity.MainActivity.VOLUME_SET;
 import static shine.com.doorscreen.activity.MainActivity.VOLUME_SWITCH;
 
@@ -103,8 +95,6 @@ public class DoorService extends Service implements Handler.Callback {
      */
     private String mMarqueeIds;
     private A64Utility mA64Utility;
-    // 格式化开关机时间
-    private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -135,22 +125,17 @@ public class DoorService extends Service implements Handler.Callback {
     public void onCreate() {
         super.onCreate();
         Log.d(TAG, "onCreate() called");
+        mA64Utility = new A64Utility();
         //多媒体和跑马灯检索时间格式，后台的时间精确到分，我们设置格式到秒，这样检索不会有1分钟误差
         mCurrentDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:02", Locale.CHINA);
         mDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
-        int[] volumnParam = SharePreferenceUtil.getVolumnParam(this);
+       /* int[] volumnParam = SharePreferenceUtil.getVolumnParam(this);
         mVolumeDay = volumnParam[0];
         mVolumeNight = volumnParam[1];
         mVolumeDayHour = volumnParam[2];
         mVolumeDayMinute = volumnParam[3];
         mVolumeNightHour = volumnParam[4];
-        mVolumeNightMinute = volumnParam[5];
-
-      /*  int[] displayTime = SharePreferenceUtil.getDisplayTime(this);
-        mOpenScreenHour = displayTime[0];
-        mOpenScreenMinute = displayTime[1];
-        mCloseScreenHour = displayTime[2];
-        mCloseScreenMinute = displayTime[3];*/
+        mVolumeNightMinute = volumnParam[5];*/
 
         HandlerThread handlerThread = new HandlerThread("door_service");
         handlerThread.start();
@@ -164,15 +149,10 @@ public class DoorService extends Service implements Handler.Callback {
         scanMarquee();
         //下一个整点扫描
         mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, (62 - current_second) * 1000);
-        mHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                setCurrentVolume();
-            }
-        }, 10 * 1000);
-        mA64Utility = new A64Utility();
-//        onOffScreen();
-        executeScreenOnOff();
+        //音量设置
+        mHandler.sendEmptyMessageDelayed(VOLUME_SET, 10 * 1000);
+        //开关屏设置
+        mHandler.sendEmptyMessage(SWITCH_SET);
     }
 
     @Override
@@ -180,17 +160,10 @@ public class DoorService extends Service implements Handler.Callback {
         final int action = intent.getIntExtra(ACTION, -1);
         switch (action) {
             case SCREEN_SWITCH:
-                mHandler.sendEmptyMessage(SWITCH_SCREEN);
+                mHandler.sendEmptyMessage(SWITCH_SET);
                 break;
             case VOLUME_SWITCH:
-                final String json = intent.getStringExtra(DATA);
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        saveSystemVolume(json);
-
-                    }
-                });
+                mHandler.sendEmptyMessage(VOLUME_SET);
                 break;
             case REBOOT:
                 mHandler.post(new Runnable() {
@@ -218,15 +191,26 @@ public class DoorService extends Service implements Handler.Callback {
                 break;
             //处理系统呼叫，如果在关屏状态需要开屏
             case CALL_ON:
-                if (!ScreenManager.getInstance(this).isScreenOn()) {
-                    mA64Utility.OpenScreen();
-                }
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                            mA64Utility.OpenScreen();
+                        }
+                    }
+                });
+
                 break;
             //呼叫结束，如果之前是关屏状态要恢复
             case CALL_OFF:
-                if (!ScreenManager.getInstance(this).isScreenOn()) {
-                    mA64Utility.CloseScreen();
-                }
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                            mA64Utility.CloseScreen();
+                        }
+                    }
+                });
                 break;
 
         }
@@ -251,9 +235,11 @@ public class DoorService extends Service implements Handler.Callback {
     @Override
     public boolean handleMessage(Message msg) {
         switch (msg.what) {
-            case SWITCH_SCREEN:
-//                onOffScreen();
+            case SWITCH_SET:
                 executeScreenOnOff();
+                break;
+            case VOLUME_SET:
+                executeVolumeSet();
                 break;
             //每一分钟从数据库检索一次合适的多媒体素材
             case SCAN_MEDIA:
@@ -323,9 +309,177 @@ public class DoorService extends Service implements Handler.Callback {
     }
 
     /**
+     * 执行开关屏
+     */
+    private void executeScreenOnOff() {
+        ScreenManager screenManager = ScreenManager.getInstance(this);
+        screenManager.scheduleScreenOnOff();
+        if (screenManager.isScreenOn()) {
+            mA64Utility.OpenScreen();
+        } else {
+            mA64Utility.CloseScreen();
+        }
+        //根据计算结果安排下次开关屏
+        mHandler.removeMessages(MainActivity.SWITCH_SET);
+        mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SET, screenManager.getOperationDelay());
+    }
+
+    /**
+     * 执行音量设置
+     */
+    private void executeVolumeSet() {
+        VolumeManager volumeManager = VolumeManager.getInstance(this);
+        volumeManager.scheduleVolume();
+        mHandler.removeMessages(VOLUME_SET);
+        mHandler.sendEmptyMessageDelayed(VOLUME_SET, volumeManager.getOperationDelay());
+    }
+
+    private Runnable mShunDown = new Runnable() {
+        @Override
+        public void run() {
+            Log.d(TAG, "执行关机");
+            Intent intent = new Intent("android.intent.action.ACTION_REQUEST_SHUTDOWN");
+            intent.putExtra("android.intent.extra.KEY_CONFIRM", false);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            stopSelf();
+            System.exit(0);
+        }
+    };
+
+    @Override
+    public void onDestroy() {
+        Log.d(TAG, "onDestroy() called");
+        mHandler.getLooper().quit();
+        mHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
+    /**
+     * 设置开关屏时间,在开屏时间类开屏，否则就关屏
+     */
+
+   /* private void onOffScreen() {
+        Calendar calendar = Calendar.getInstance();
+        long current = calendar.getTimeInMillis();
+        Log.d(TAG, "设置关屏 当前时间为：" + mDateFormat.format(current));
+        calendar.set(Calendar.HOUR_OF_DAY, mCloseScreenHour);
+        calendar.set(Calendar.MINUTE, mCloseScreenMinute);
+        calendar.set(Calendar.SECOND, 0);
+        //当天关屏时间起点
+        long closeScreenTime = calendar.getTimeInMillis();
+        Log.d(TAG, "设置当天关屏时间为：" + mDateFormat.format(closeScreenTime));
+        calendar.set(Calendar.HOUR_OF_DAY, mOpenScreenHour);
+        calendar.set(Calendar.MINUTE, mOpenScreenMinute);
+        //当天开屏时间
+        long openScreenTime = calendar.getTimeInMillis();
+        Log.d(TAG, "设置当天开屏时间为：" + mDateFormat.format(openScreenTime));
+
+        //如果还没到开屏时间，关屏并发送消息到点开屏
+        if (current < openScreenTime) {
+            Log.d(TAG, "小于开屏时间，关屏");
+            mA64Utility.CloseScreen();
+            Log.d(TAG, "(openScreenTime-current):" + (openScreenTime - current));
+            mHandler.removeMessages(MainActivity.SWITCH_SET);
+            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SET, openScreenTime - current);
+
+        } else if (current >= openScreenTime && current < closeScreenTime) {
+            //如果在开屏时间里
+            Log.d(TAG, "在开屏时间，开屏");
+            mA64Utility.OpenScreen();
+            //发送关屏信息
+            Log.d(TAG, (closeScreenTime - current) + " 后关屏");
+
+            mHandler.removeMessages(MainActivity.SWITCH_SET);
+            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SET, closeScreenTime - current);
+        } else {
+            Log.d(TAG, "大于开屏时间，关屏");
+            mA64Utility.CloseScreen();
+            //设置明天开屏时间，
+            calendar.add(Calendar.DAY_OF_MONTH, 1);
+            Log.d(TAG, "延迟到明天开屏:" + (calendar.getTimeInMillis() - current));
+            mHandler.removeMessages(MainActivity.SWITCH_SET);
+            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SET, calendar.getTimeInMillis() - current);
+        }
+    }*/
+
+    /**
+     * 保存系统亮度
+     * 目前仅开关屏时间
+     * 使用集合中的最后一个数据即可
+     */
+
+   /* private void saveSystemLight(String json) {
+        Log.d(TAG, "saveSystemLight");
+        SystemLight lightParam = new Gson().fromJson(json, SystemLight.class);
+        String[] start = lightParam.getStart().split(":");
+        if (start.length > 1) {
+            mOpenScreenHour = Integer.parseInt(start[0]);
+            mOpenScreenMinute = Integer.parseInt(start[1]);
+        }
+        Log.d(TAG, "mOpenScreenHour:" + mOpenScreenHour);
+        String[] end = lightParam.getStop().split(":");
+        if (end.length > 1) {
+            mCloseScreenHour = Integer.parseInt(end[0]);
+            mCloseScreenMinute = Integer.parseInt(end[1]);
+        }
+        Log.d(TAG, "mCloseScreenHour:" + mCloseScreenHour);
+        SharePreferenceUtil.saveDisplayTime(this, mOpenScreenHour, mOpenScreenMinute, mCloseScreenHour, mCloseScreenMinute);
+        //取消之前的设置
+        mHandler.removeMessages(SWITCH_SET);
+//        onOffScreen();
+    }*/
+
+    /**
+     * 保存音量设置
+     *
+     * @param json 后台发来的数据，数据比较冗余，只取关键数据
+     *             SystemVolume和SystemLight数据一样
+     */
+    /*private void saveSystemVolume(String json) {
+        try {
+            SystemInfo systemVolume = new Gson().fromJson(json, SystemInfo.class);
+            if (systemVolume != null) {
+                List<SystemLight> list = systemVolume.getDatalist();
+                if (list != null && list.size() > 1) {
+                    //这个只用来获取晚上音量
+                    SystemLight volumeNight = list.get(0);
+                    //最后一个数据有白天，晚上的分割点，及音量
+                    SystemLight volumeDay = list.get(list.size() - 1);
+                    mVolumeNight = volumeNight.getValue();
+                    mVolumeDay = volumeDay.getValue();
+                    Log.d(TAG, "volumeNightValue:" + mVolumeNight);
+                    Log.d(TAG, "volumeDayValue:" + mVolumeDay);
+
+                    String[] start = volumeDay.getStart().split(":");
+                    if (start.length > 1) {
+                        mVolumeDayHour = Integer.parseInt(start[0]);
+                        mVolumeDayMinute = Integer.parseInt(start[1]);
+                        Log.d(TAG, "volumeDayPoint:" + mVolumeDayHour + "-" + mVolumeDayMinute);
+                    }
+                    String[] end = volumeDay.getStop().split(":");
+                    if (end.length > 1) {
+                        mVolumeNightHour = Integer.parseInt(end[0]);
+                        mVolumeNightMinute = Integer.parseInt(end[1]);
+                        Log.d(TAG, "volumeNightPoint:" + mVolumeNightHour + "--" + mVolumeNightMinute);
+                    }
+                    SharePreferenceUtil.saveVolumeParam(this, mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
+                            mVolumeNightHour, mVolumeNightMinute);
+                    //取消之前的消息，重新设置
+                    mHandler.removeMessages(VOLUME_SET);
+                    setCurrentVolume();
+                }
+            }
+
+        } catch (JsonSyntaxException e) {
+            Log.e(TAG, "fail to parse json:" + e.toString());
+        }
+    }*/
+
+    /**
      * 设置当前音量,根据当前时间设置对应的音量，并设置时间点启动下一次设置
      */
-    private void setCurrentVolume() {
+    /*private void setCurrentVolume() {
         Calendar calendar = Calendar.getInstance();
         long current = calendar.getTimeInMillis();
         Log.d(TAG, "设置音量 当前时间为：" + mDateFormat.format(current));
@@ -367,164 +521,6 @@ public class DoorService extends Service implements Handler.Callback {
                 max * volume / 100, AudioManager.FLAG_SHOW_UI);
 //        int streamVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
 //        Log.d(TAG, "streamVolume:" + streamVolume);
-    }
-
-
-    /**
-     * 保存音量设置
-     *
-     * @param json 后台发来的数据，数据比较冗余，只取关键数据
-     *             SystemVolume和SystemLight数据一样
-     */
-    private void saveSystemVolume(String json) {
-        try {
-            SystemInfo systemVolume = new Gson().fromJson(json, SystemInfo.class);
-            if (systemVolume != null) {
-                List<SystemLight> list = systemVolume.getDatalist();
-                if (list != null && list.size() > 1) {
-                    //这个只用来获取晚上音量
-                    SystemLight volumeNight = list.get(0);
-                    //最后一个数据有白天，晚上的分割点，及音量
-                    SystemLight volumeDay = list.get(list.size() - 1);
-                    mVolumeNight = volumeNight.getValue();
-                    mVolumeDay = volumeDay.getValue();
-                    Log.d(TAG, "volumeNightValue:" + mVolumeNight);
-                    Log.d(TAG, "volumeDayValue:" + mVolumeDay);
-
-                    String[] start = volumeDay.getStart().split(":");
-                    if (start.length > 1) {
-                        mVolumeDayHour = Integer.parseInt(start[0]);
-                        mVolumeDayMinute = Integer.parseInt(start[1]);
-                        Log.d(TAG, "volumeDayPoint:" + mVolumeDayHour + "-" + mVolumeDayMinute);
-                    }
-                    String[] end = volumeDay.getStop().split(":");
-                    if (end.length > 1) {
-                        mVolumeNightHour = Integer.parseInt(end[0]);
-                        mVolumeNightMinute = Integer.parseInt(end[1]);
-                        Log.d(TAG, "volumeNightPoint:" + mVolumeNightHour + "--" + mVolumeNightMinute);
-                    }
-                    SharePreferenceUtil.saveVolumeParam(this, mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
-                            mVolumeNightHour, mVolumeNightMinute);
-                    //取消之前的消息，重新设置
-                    mHandler.removeMessages(VOLUME_SET);
-                    setCurrentVolume();
-                }
-            }
-
-        } catch (JsonSyntaxException e) {
-            Log.e(TAG, "fail to parse json:" + e.toString());
-        }
-    }
-
-    /**
-     * 保存系统亮度
-     * 目前仅开关屏时间
-     * 使用集合中的最后一个数据即可
-     */
-    @Deprecated
-    private void saveSystemLight(String json) {
-        Log.d(TAG, "saveSystemLight");
-        SystemLight lightParam = new Gson().fromJson(json, SystemLight.class);
-        String[] start = lightParam.getStart().split(":");
-        if (start.length > 1) {
-            mOpenScreenHour = Integer.parseInt(start[0]);
-            mOpenScreenMinute = Integer.parseInt(start[1]);
-        }
-        Log.d(TAG, "mOpenScreenHour:" + mOpenScreenHour);
-        String[] end = lightParam.getStop().split(":");
-        if (end.length > 1) {
-            mCloseScreenHour = Integer.parseInt(end[0]);
-            mCloseScreenMinute = Integer.parseInt(end[1]);
-        }
-        Log.d(TAG, "mCloseScreenHour:" + mCloseScreenHour);
-        SharePreferenceUtil.saveDisplayTime(this, mOpenScreenHour, mOpenScreenMinute, mCloseScreenHour, mCloseScreenMinute);
-        //取消之前的设置
-        mHandler.removeMessages(SWITCH_SCREEN);
-//        onOffScreen();
-    }
-
-
-    private void executeScreenOnOff() {
-        ScreenManager screenManager = ScreenManager.getInstance(this);
-        screenManager.scheduleScreenOnOff();
-        if (screenManager.isScreenOn()) {
-            mA64Utility.OpenScreen();
-        } else {
-            mA64Utility.CloseScreen();
-        }
-        //根据计算结果安排下次开关屏
-        mHandler.removeMessages(MainActivity.SWITCH_SCREEN);
-        mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SCREEN, screenManager.getOperationDelay());
-
-
-    }
-
-    /**
-     * 设置开关屏时间,在开屏时间类开屏，否则就关屏
-     */
-    @Deprecated
-    private void onOffScreen() {
-        Calendar calendar = Calendar.getInstance();
-        long current = calendar.getTimeInMillis();
-        Log.d(TAG, "设置关屏 当前时间为：" + mDateFormat.format(current));
-        calendar.set(Calendar.HOUR_OF_DAY, mCloseScreenHour);
-        calendar.set(Calendar.MINUTE, mCloseScreenMinute);
-        calendar.set(Calendar.SECOND, 0);
-        //当天关屏时间起点
-        long closeScreenTime = calendar.getTimeInMillis();
-        Log.d(TAG, "设置当天关屏时间为：" + mDateFormat.format(closeScreenTime));
-        calendar.set(Calendar.HOUR_OF_DAY, mOpenScreenHour);
-        calendar.set(Calendar.MINUTE, mOpenScreenMinute);
-        //当天开屏时间
-        long openScreenTime = calendar.getTimeInMillis();
-        Log.d(TAG, "设置当天开屏时间为：" + mDateFormat.format(openScreenTime));
-
-        //如果还没到开屏时间，关屏并发送消息到点开屏
-        if (current < openScreenTime) {
-            Log.d(TAG, "小于开屏时间，关屏");
-            mA64Utility.CloseScreen();
-            Log.d(TAG, "(openScreenTime-current):" + (openScreenTime - current));
-            mHandler.removeMessages(MainActivity.SWITCH_SCREEN);
-            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SCREEN, openScreenTime - current);
-
-        } else if (current >= openScreenTime && current < closeScreenTime) {
-            //如果在开屏时间里
-            Log.d(TAG, "在开屏时间，开屏");
-            mA64Utility.OpenScreen();
-            //发送关屏信息
-            Log.d(TAG, (closeScreenTime - current) + " 后关屏");
-
-            mHandler.removeMessages(MainActivity.SWITCH_SCREEN);
-            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SCREEN, closeScreenTime - current);
-        } else {
-            Log.d(TAG, "大于开屏时间，关屏");
-            mA64Utility.CloseScreen();
-            //设置明天开屏时间，
-            calendar.add(Calendar.DAY_OF_MONTH, 1);
-            Log.d(TAG, "延迟到明天开屏:" + (calendar.getTimeInMillis() - current));
-            mHandler.removeMessages(MainActivity.SWITCH_SCREEN);
-            mHandler.sendEmptyMessageDelayed(MainActivity.SWITCH_SCREEN, calendar.getTimeInMillis() - current);
-        }
-    }
-
-    private Runnable mShunDown = new Runnable() {
-        @Override
-        public void run() {
-            Log.d(TAG, "执行关机");
-            Intent intent = new Intent("android.intent.action.ACTION_REQUEST_SHUTDOWN");
-            intent.putExtra("android.intent.extra.KEY_CONFIRM", false);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            stopSelf();
-            System.exit(0);
-        }
-    };
-
-    @Override
-    public void onDestroy() {
-        Log.d(TAG, "onDestroy() called");
-        mHandler.getLooper().quit();
-        mHandler.removeCallbacksAndMessages(null);
-        super.onDestroy();
-    }
+    }*/
 }
+

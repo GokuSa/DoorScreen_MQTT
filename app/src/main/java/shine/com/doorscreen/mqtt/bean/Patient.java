@@ -6,6 +6,8 @@ import android.arch.persistence.room.Ignore;
 import android.arch.persistence.room.PrimaryKey;
 import android.provider.BaseColumns;
 
+import shine.com.doorscreen.util.Common;
+
 /**
  * 住院的病人信息，没有病人也要显示床位，床位和床头屏对应，增删依赖其mac地址
  * Patient应该是床位的意思，
@@ -17,6 +19,7 @@ public class Patient {
     @ColumnInfo(name = "name")
     private String patientname;
     private String bedno;
+    private int bedNum=-1;
     private String doctorname;
     //床头屏mac地址
     @PrimaryKey
@@ -32,6 +35,7 @@ public class Patient {
         this.doctorname = doctorname;
         this.clientmac = clientmac;
         this.isCalling = isCalling;
+        this.bedNum = Common.getNumbers(bedno);
     }
 
     @Ignore
@@ -53,6 +57,7 @@ public class Patient {
 
     public void setBedno(String bedno) {
         this.bedno = bedno;
+        this.bedNum = Common.getNumbers(bedno);
     }
 
     public String getDoctorname() {
@@ -77,6 +82,14 @@ public class Patient {
 
     public void setClientmac(String clientmac) {
         this.clientmac = clientmac;
+    }
+
+    public int getBedNum() {
+        return bedNum;
+    }
+
+    public void setBedNum(int bedNum) {
+        this.bedNum = bedNum;
     }
 
     @Override

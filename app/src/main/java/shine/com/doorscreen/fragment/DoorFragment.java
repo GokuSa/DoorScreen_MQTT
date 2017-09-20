@@ -138,13 +138,6 @@ public class DoorFragment extends LifecycleFragment {
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated() called with");
         mMarqueeView = (MarqueeView) view.findViewById(R.id.marqueeView);
-       /* mBinding.tvTitle.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                MainActivity activity = (MainActivity) getActivity();
-                activity.handleCallTransfer("",true);
-            }
-        });*/
         isPrepared = true;
     }
 

@@ -18,7 +18,7 @@ import shine.com.doorscreen.mqtt.bean.Ward;
  * qq:1220289215
  * 类描述：
  */
-@Database(entities = {Ward.class, Staff.class, Patient.class, ReStart.class},version =8,exportSchema = false)
+@Database(entities = {Ward.class, Staff.class, Patient.class, ReStart.class},version =10,exportSchema = false)
 public abstract class WardDataBase extends RoomDatabase {
 
     public abstract WardDao ward();

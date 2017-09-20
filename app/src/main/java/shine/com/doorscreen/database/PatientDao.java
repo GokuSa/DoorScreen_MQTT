@@ -24,7 +24,7 @@ public interface PatientDao {
     @Query("select * from patient")
     List<Patient> getPatientList();
 
-    @Query("select * from patient")
+    @Query("select * from patient order by bedNum asc")
     LiveData<List<Patient>> loadPatients();
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

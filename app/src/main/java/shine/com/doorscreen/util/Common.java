@@ -3,6 +3,7 @@ package shine.com.doorscreen.util;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -19,6 +20,8 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Enumeration;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -224,4 +227,23 @@ public class Common {
         return (a == b) || (a != null && a.equals(b));
     }
 
+    //截取数字
+    public static int getNumbers(String content) {
+        int num=-1;
+        if (TextUtils.isEmpty(content)) {
+            return num;
+        }
+        Pattern pattern = Pattern.compile("\\d+");
+        Matcher matcher = pattern.matcher(content);
+        if (matcher.find()) {
+            if (!TextUtils.isEmpty(matcher.group(0))) {
+                try {
+                    num = Integer.parseInt(matcher.group(0));
+                } catch (NumberFormatException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return num;
+    }
 }
