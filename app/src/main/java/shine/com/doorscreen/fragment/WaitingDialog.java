@@ -5,7 +5,9 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
+import android.view.View;
 
 /**
  * author:
@@ -36,5 +38,12 @@ public class WaitingDialog extends DialogFragment {
 //                .setMessage(getArguments().getString(ARG_MESSAGE))
 //                .setView(new ProgressBar(activity))
                 .create();
+    }
+
+    @Override
+    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        //
+        getDialog().setCanceledOnTouchOutside(false);
     }
 }

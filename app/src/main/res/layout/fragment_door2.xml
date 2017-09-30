@@ -88,9 +88,22 @@
             android:paddingRight="16px"
             android:paddingTop="8px">
             <!--底部跑马灯-->
-            <include
+            <shine.com.doorscreen.customview.MarqueeTextView
                 android:id="@+id/fl"
-                layout="@layout/layout_bottom"/>
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_marquee"
+                android:layout_alignParentBottom="true"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:maxLines="1"
+                android:textColor="@android:color/white"
+                android:textSize="20sp"
+                android:gravity="center_vertical"
+                tools:text="shisdfsdfsdfsfne"/>
+           <!-- <include
+                android:id="@+id/fl"
+                layout="@layout/layout_bottom"/>-->
             <!--输液提醒 和 医生信息 通过ViewSwitcher切换-->
             <LinearLayout
                 android:id="@+id/ll_drip_doctor"

@@ -19,9 +19,11 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -31,10 +33,11 @@ import shine.com.doorscreen.adapter.InsetDecoration;
 import shine.com.doorscreen.adapter.PatientAdapter2;
 import shine.com.doorscreen.adapter.RecycleViewDivider;
 import shine.com.doorscreen.adapter.StaffAdapter;
-import shine.com.doorscreen.customview.MarqueeView;
 import shine.com.doorscreen.database.DoorScreenDataBase;
+import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.databinding.FragmentDoor2Binding;
 import shine.com.doorscreen.entity.DripInfo;
+import shine.com.doorscreen.mqtt.bean.Marquee;
 import shine.com.doorscreen.mqtt.bean.Patient;
 import shine.com.doorscreen.mqtt.bean.ReStart;
 import shine.com.doorscreen.mqtt.bean.Staff;
@@ -58,12 +61,25 @@ public class DoorFragment extends LifecycleFragment {
     private static final int KEEP_TIME = 0;
     private static final int DRIP_UPDATE = 1;
     private static final int UPDATE_MARQUEE = 6;
+    private static final int MSG_MARQUEE_ADD = 7;
+    private static final int MSG_MARQUEE_REMOVE = 8;
+    private static final int MSG_SCHEDULE_MARQUEES = 9;
+    private static final int MSG_REFRESH_TOMORROW = 10;
+
 
     /**
      * 格式化当前时间，用于标题的时间和输液开始时间格式化
      */
     private SimpleDateFormat mSimpleDateFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
-    private DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.FULL, Locale.CHINA);
+    /**
+     * 格式化跑马的时间
+     */
+    private SimpleDateFormat mTimeFormat = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
+    /**
+     * 格式化跑马的日期
+     */
+    private SimpleDateFormat mMarqueeDateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+    private DateFormat mDateFormat = DateFormat.getDateInstance(DateFormat.FULL, Locale.CHINA);
 
     private DripAdapter mDripAdapter;
     private PatientAdapter2 mPatientAdapter;
@@ -73,25 +89,21 @@ public class DoorFragment extends LifecycleFragment {
     private StaffAdapter mStaffAdapter;
 
 
+//    private MarqueeView mMarqueeView;
     /**
      * 当前跑马灯信息
      */
     List<String> mMarquees = new ArrayList<>();
-    private List<ReStart> mReStartParams=new ArrayList<>();
+
+    private List<ReStart> mReStartParams = new ArrayList<>();
 
     private WardViewModel mWardViewModel;
-
     @SuppressWarnings("handlerleak")
     private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case KEEP_TIME:
-                    String date_week = dateFormat.format(System.currentTimeMillis());
-                    //更新日期
-                    mBinding.tvDate.setText(date_week.substring(0, date_week.length() - 3));
-                    //更新星期
-                    mBinding.tvWeekday.setText(date_week.substring(date_week.length() - 3));
                     //更新时间
                     String time = mSimpleDateFormat.format(System.currentTimeMillis());
                     mBinding.tvTime.setText(time);
@@ -110,11 +122,56 @@ public class DoorFragment extends LifecycleFragment {
                         mTvInfo.setText(R.string.drip_info);
                     }*/
                     break;
+                case MSG_MARQUEE_ADD:
+                    mBinding.fl.add((Marquee) msg.obj);
+                    break;
+                case MSG_MARQUEE_REMOVE:
+                    mBinding.fl.delete((Marquee) msg.obj);
+                    break;
+                case MSG_SCHEDULE_MARQUEES:
+                    scheduleMarquees();
+                    break;
+                case MSG_REFRESH_TOMORROW:
+                    String date_week = mDateFormat.format(System.currentTimeMillis());
+                    //更新日期
+                    mBinding.tvDate.setText(date_week.substring(0, date_week.length() - 3));
+                    //更新星期
+                    mBinding.tvWeekday.setText(date_week.substring(date_week.length() - 3));
+                    //重新安排今天的跑马灯
+                    scheduleMarquees();
+                    //安排到明天
+                    sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, 24 * 60 *60* 1000);
+                    break;
 
             }
         }
     };
-    private MarqueeView mMarqueeView;
+
+    @Override
+    public void setUserVisibleHint(boolean isVisibleToUser) {
+        super.setUserVisibleHint(isVisibleToUser);
+        Log.d(TAG, "isVisibleToUser = [" + isVisibleToUser + "]");
+        isVisible = isVisibleToUser;
+        if (isVisibleToUser) {
+            onVisible();
+        } else {
+            onInvisible();
+        }
+    }
+
+    public void onInvisible() {
+        if (isPrepared) {
+//            mMarqueeView.terminate();
+        }
+    }
+
+    private void onVisible() {
+        if (isPrepared) {
+            if (mMarquees.size() > 0) {
+//                mMarqueeView.setContent(mMarquees);
+            }
+        }
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -137,7 +194,7 @@ public class DoorFragment extends LifecycleFragment {
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated() called with");
-        mMarqueeView = (MarqueeView) view.findViewById(R.id.marqueeView);
+//        mMarqueeView = (MarqueeView) view.findViewById(R.id.marqueeView);
         isPrepared = true;
     }
 
@@ -165,7 +222,7 @@ public class DoorFragment extends LifecycleFragment {
                     mBinding.tvVisitPeriodTwo.setText(ward.getNoon());
                     mBinding.tvVisitPeriodThree.setText(ward.getNight());
                     handleCalling(ward.getCallTip());
-                }else{
+                } else {
                     mBinding.tvTitle.setText("");
                     mBinding.tvVisitPeriodOne.setText("");
                     mBinding.tvVisitPeriodTwo.setText("");
@@ -193,53 +250,14 @@ public class DoorFragment extends LifecycleFragment {
         //从本地获取重启参数
         mReStartParams.clear();
         mReStartParams.addAll(mWardViewModel.getReStartParams());
+
         //显示当前时间，
         showCurrentDateTime();
 
-    }
+        //从本地获取跑马灯数据 安排跑马灯
+        //连上网络后先更新本地数据库，所以延迟5秒从本地数据库获取跑马灯数据，防止联网失败
+        mHandler.sendEmptyMessageDelayed(MSG_SCHEDULE_MARQUEES, 5000);
 
-    /**
-     * 处理呼叫
-     *
-     * @param callTip
-     */
-    private void handleCalling(String callTip) {
-        if (!TextUtils.isEmpty(callTip)) {
-            //有呼叫,当前不在呼叫视图，切换
-            if ((mBinding.viewSwitchCallAndVisit.getCurrentView().getId() != R.id.ll_call_info)) {
-                mBinding.viewSwitchCallAndVisit.showNext();
-            }
-            mBinding.tvPatientCall.setText(callTip);
-        } else {
-            //没有呼叫，不在探视视图，切换
-            if ((mBinding.viewSwitchCallAndVisit.getCurrentView().getId() != R.id.ll_visit_info)) {
-                mBinding.viewSwitchCallAndVisit.showNext();
-            }
-        }
-
-    }
-
-
-    /**
-     * 每分钟刷新时间时调用，满足条件执行重启
-     * @param time
-     */
-    private void scheduleReStart(String time) {
-        if (mReStartParams.size() > 0) {
-            //获取今天星期几,从0到6
-            int day = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)-1;
-            //防止越界
-            if (day < mReStartParams.size()) {
-                //获取今天的重启参数
-                ReStart reStart = mReStartParams.get(day);
-                //如果重启
-                if (reStart.getReboot() == 1&&time.equals(reStart.getRebootTime())) {
-                    //关机60s后重启
-                    Common.open(System.currentTimeMillis() + 60 * 1000);
-                    DoorService.startService(getActivity(), CLOSE, "");
-                }
-            }
-        }
     }
 
 
@@ -272,6 +290,7 @@ public class DoorFragment extends LifecycleFragment {
     public void onDestroyView() {
         super.onDestroyView();
         Log.d(TAG, "onDestroyView: ");
+        mBinding.fl.stopMarquee();
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -281,29 +300,47 @@ public class DoorFragment extends LifecycleFragment {
         Log.d(TAG, "onDestroy: ");
     }
 
-    @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
-        Log.d(TAG, "isVisibleToUser = [" + isVisibleToUser + "]");
-        isVisible = isVisibleToUser;
-        if (isVisibleToUser) {
-            onVisible();
+    /**
+     * 处理呼叫
+     *
+     * @param callTip
+     */
+    private void handleCalling(String callTip) {
+        if (!TextUtils.isEmpty(callTip)) {
+            //有呼叫,当前不在呼叫视图，切换
+            if ((mBinding.viewSwitchCallAndVisit.getCurrentView().getId() != R.id.ll_call_info)) {
+                mBinding.viewSwitchCallAndVisit.showNext();
+            }
+            mBinding.tvPatientCall.setText(callTip);
         } else {
-            onInvisible();
+            //没有呼叫，不在探视视图，切换
+            if ((mBinding.viewSwitchCallAndVisit.getCurrentView().getId() != R.id.ll_visit_info)) {
+                mBinding.viewSwitchCallAndVisit.showNext();
+            }
         }
+
     }
 
-    public void onInvisible() {
-        if (isPrepared) {
-            mMarqueeView.terminate();
 
-        }
-    }
-
-    private void onVisible() {
-        if (isPrepared) {
-            if (mMarquees.size() > 0) {
-                mMarqueeView.setContent(mMarquees);
+    /**
+     * 每分钟刷新时间时调用，满足条件执行重启
+     *
+     * @param time
+     */
+    private void scheduleReStart(String time) {
+        if (mReStartParams.size() > 0) {
+            //获取今天星期几,从0到6
+            int day = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1;
+            //防止越界
+            if (day < mReStartParams.size()) {
+                //获取今天的重启参数
+                ReStart reStart = mReStartParams.get(day);
+                //如果重启
+                if (reStart.getReboot() == 1 && time.equals(reStart.getRebootTime())) {
+                    //关机60s后重启
+                    Common.open(System.currentTimeMillis() + 60 * 1000);
+                    DoorService.startService(getActivity(), CLOSE, "");
+                }
             }
         }
     }
@@ -320,7 +357,7 @@ public class DoorFragment extends LifecycleFragment {
         //格式化当前时间为 年 月 日  星期几，比如2016年8月10日 星期三
         Calendar calendar = Calendar.getInstance();
         long current = calendar.getTimeInMillis();
-        String date_week = dateFormat.format(current);
+        String date_week = mDateFormat.format(current);
         //android 这个格式化方法中间没有空格，不能split
         mBinding.tvDate.setText(date_week.substring(0, date_week.length() - 3));
         mBinding.tvWeekday.setText(date_week.substring(date_week.length() - 3));
@@ -331,6 +368,14 @@ public class DoorFragment extends LifecycleFragment {
         //整点更新时钟
         mHandler.sendEmptyMessageDelayed(KEEP_TIME, (60 - current_second) * 1000);
 
+        //设置第二天凌晨 更新日期 更新跑马灯灯当天工作
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.add(Calendar.DAY_OF_MONTH, 1);
+        Log.d(TAG, "tomorrow "+mDateFormat.format(calendar.getTimeInMillis()));
+        mHandler.removeMessages(MSG_REFRESH_TOMORROW);
+        mHandler.sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, calendar.getTimeInMillis() - current);
     }
 
     //同步本地时间
@@ -351,11 +396,12 @@ public class DoorFragment extends LifecycleFragment {
             public void run() {
                 mReStartParams.clear();
                 mReStartParams.addAll(mWardViewModel.getReStartParams());
-                Log.d(TAG,"mReStartParams "+ mReStartParams.toString());
+                Log.d(TAG, "mReStartParams " + mReStartParams.toString());
             }
         });
 
     }
+
     /**
      * @param title 标题文字，区分中文和其他，显示的时候字体大小及边距区别处理
      */
@@ -467,13 +513,15 @@ public class DoorFragment extends LifecycleFragment {
     }
 
 
+    @Deprecated
     public void updateMarquee(String paramMarquee) {
         List<String> content = DoorScreenDataBase.getInstance(getActivity()).queryMarquee(paramMarquee);
         mMarquees.clear();
         mMarquees.addAll(content);
         if (isVisible && mMarquees.size() > 0) {
-            mMarqueeView.setContent(content);
+//            mMarqueeView.setContent(content);
         }
+
     }
 
     /**
@@ -481,14 +529,85 @@ public class DoorFragment extends LifecycleFragment {
      *
      * @param
      */
+    @Deprecated
     public void stopMarquee() {
         if (isVisible) {
-            mMarqueeView.terminate();
+//            mMarqueeView.terminate();
         }
     }
 
-    public void moveToCallingPatient(int i) {
-//        mRvPatients.scrollToPosition(i);
+    private List<Marquee> mMarqueeList = new ArrayList<>();
+    /*
+    *  1. 同步与服务器的跑马灯
+    *  2.中途删除 添加了跑马灯
+    * 先取消之前延迟的消息，再执行
+    **/
+    public void updateMarquee() {
+//        仅仅是取消页面刚启动发的延迟信息，避免重复更新
+        mHandler.removeMessages(MSG_SCHEDULE_MARQUEES);
+        //中途跑马灯有变动
+        mHandler.removeMessages(MSG_MARQUEE_REMOVE);
+        mHandler.removeMessages(MSG_MARQUEE_ADD);
+        scheduleMarquees();
+    }
+
+    /*
+     * 安排跑马灯
+    * 从数据库检索今天需要播放的所有活跃的跑马灯
+    * 是否在播放时间段还需要进一步判断
+    * 第二天凌晨需要再次调用重新安排
+    * */
+    private void scheduleMarquees() {
+        //获取当天日期，格式为2017-05-12
+        String current = mMarqueeDateFormat.format(System.currentTimeMillis());
+        List<Marquee> marquees =
+                WardDataBase.INSTANCE(getActivity()).marqueeDao().queryValidMarquee(current);
+        mMarqueeList.clear();
+        //对每个跑马灯安排播放和结束
+        for (Marquee marquee : marquees) {
+            Log.d(TAG, "marquee " + marquee.toString());
+            arrangeMarqueeByPlayingTime(marquee);
+        }
+
+        if (mMarqueeList.size() > 0) {
+            mBinding.fl.startMarquee(mMarqueeList);
+        } else {
+            mBinding.fl.stopMarquee();
+        }
+    }
+
+    /**
+     * 首先跑马灯的播放时间如果是多时间段，是升序排列的
+     * Marquee 是一个时间段的跑马灯，多个时间段的跑马灯内容相同
+     * 判断当前时间是否在播放时间内，如果在 添加到集合中
+     * 为其他未来播放时间段安排跑马灯的添加和删除
+     */
+    private void arrangeMarqueeByPlayingTime(Marquee marquee) {
+        Date today = new Date();
+        String today_str = mTimeFormat.format(today);
+        try {
+            //一定要这样格式化当前时间
+            Date todayTime = mTimeFormat.parse(today_str);
+            Date startTime = mTimeFormat.parse(String.format("%s:00", marquee.getStartTime()));
+            Date stopTime = mTimeFormat.parse(String.format("%s:00", marquee.getStopTime()));
+            //当前时间与跑马灯的起始结束时间有三种可能，在播放时间之前，在播放时间内，过了播放时间不处理
+            long marginWithStart = todayTime.getTime() - startTime.getTime();
+            long marginWithStop = todayTime.getTime() - stopTime.getTime();
+            if (marginWithStart < 0) {
+                //还没到播放时间,安排开始和结束
+                mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_ADD, marquee), -marginWithStart);
+                mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_REMOVE, marquee), -marginWithStop);
+            } else if (marginWithStart >= 0 && marginWithStop <= 0) {
+                //在播放时间内立马添加到播放集合，同时安排结束
+                mMarqueeList.add(marquee);
+                mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_REMOVE, marquee), -marginWithStop);
+            } else {
+                Log.d(TAG, "arrangeMarqueeByPlayingTime: out of play time");
+            }
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+
     }
 
 

@@ -33,7 +33,6 @@ import static shine.com.doorscreen.activity.MainActivity.MEDIA_STOP;
 import static shine.com.doorscreen.activity.MainActivity.REBOOT;
 import static shine.com.doorscreen.activity.MainActivity.REMOVE_CLOSE;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MARQUEE;
-import static shine.com.doorscreen.activity.MainActivity.SCAN_MARQUEE_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCREEN_SWITCH;
@@ -52,37 +51,6 @@ public class DoorService extends Service implements Handler.Callback {
     private static final String TAG = "DoorService";
     public static final String ACTION = "action";
     public static final String DATA = "data";
-    private SimpleDateFormat mDateFormat;
-    /**
-     * 白天要设置的音量
-     */
-    private int mVolumeDay;
-    /**
-     * 夜晚要设置的音量
-     */
-    private int mVolumeNight;
-    /**
-     * 白天时间起始点
-     */
-    private int mVolumeDayHour;
-    private int mVolumeDayMinute;
-
-    /**
-     * 白天时间结束点，夜晚时间起始点
-     */
-    private int mVolumeNightHour;
-    private int mVolumeNightMinute;
-
-    /**
-     * 开屏时间
-     */
-    private int mOpenScreenHour;
-    private int mOpenScreenMinute;
-    /**
-     * 关闭时间
-     */
-    private int mCloseScreenHour;
-    private int mCloseScreenMinute;
 
     private Handler mHandler;
     private DateFormat mCurrentDateFormat;
@@ -128,14 +96,6 @@ public class DoorService extends Service implements Handler.Callback {
         mA64Utility = new A64Utility();
         //多媒体和跑马灯检索时间格式，后台的时间精确到分，我们设置格式到秒，这样检索不会有1分钟误差
         mCurrentDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:02", Locale.CHINA);
-        mDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
-       /* int[] volumnParam = SharePreferenceUtil.getVolumnParam(this);
-        mVolumeDay = volumnParam[0];
-        mVolumeNight = volumnParam[1];
-        mVolumeDayHour = volumnParam[2];
-        mVolumeDayMinute = volumnParam[3];
-        mVolumeNightHour = volumnParam[4];
-        mVolumeNightMinute = volumnParam[5];*/
 
         HandlerThread handlerThread = new HandlerThread("door_service");
         handlerThread.start();
@@ -146,7 +106,7 @@ public class DoorService extends Service implements Handler.Callback {
         //整分扫描多媒体和跑马灯
 //        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
         //立马扫描
-        scanMarquee();
+//        scanMarquee();
         //下一个整点扫描
         mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, (62 - current_second) * 1000);
         //音量设置
@@ -247,8 +207,8 @@ public class DoorService extends Service implements Handler.Callback {
                 mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, SCAN_MEDIA_INTERVAL);
                 break;
             case SCAN_MARQUEE:
-                scanMarquee();
-                mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, SCAN_MARQUEE_INTERVAL);
+//                scanMarquee();
+//                mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, SCAN_MARQUEE_INTERVAL);
                 break;
 
         }

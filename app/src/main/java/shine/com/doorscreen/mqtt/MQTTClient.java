@@ -4,6 +4,7 @@ import android.app.AlarmManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
@@ -30,11 +31,11 @@ import java.util.Locale;
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
-import shine.com.doorscreen.database.DoorScreenDataBase;
 import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.mqtt.bean.CallTransfer;
 import shine.com.doorscreen.mqtt.bean.Doctor;
 import shine.com.doorscreen.mqtt.bean.DoorScreenMessage;
+import shine.com.doorscreen.mqtt.bean.Marquee;
 import shine.com.doorscreen.mqtt.bean.MarqueeInfo;
 import shine.com.doorscreen.mqtt.bean.MarqueeList;
 import shine.com.doorscreen.mqtt.bean.Message;
@@ -60,8 +61,6 @@ import shine.com.doorscreen.util.IniReaderNoSection;
 import shine.com.doorscreen.util.RootCommand;
 
 import static java.lang.Integer.parseInt;
-import static shine.com.doorscreen.activity.MainActivity.MARQUEE_STOP;
-import static shine.com.doorscreen.activity.MainActivity.MARQUEE_UPDATE;
 import static shine.com.doorscreen.util.Common.getMacAddress;
 
 
@@ -80,6 +79,10 @@ public class MQTTClient {
     private Gson mGson = new Gson();
     private String mDepartmentId = "1";
     private String mRoomId = "1";
+    private static final String USER_NAME = "shine";
+    private static final String PASSWORD = "shine";
+
+
     private MqttAndroidClient mqttAndroidClient;
     /**
      * 服务送达消息的质量，0～2，2表示肯定送达
@@ -149,7 +152,6 @@ public class MQTTClient {
         mClientId = getMacAddress();
 
         mqttAndroidClient = new MqttAndroidClient(context.getApplicationContext(), serverUri, mClientId);
-//        mqttAndroidClient = new MqttAndroidClient(context.getApplicationContext(), getEncodeString(serverUri), getEncodeString(mClientId));
         mqttAndroidClient.setCallback(mCallbackExtended);
         try {
             mqttAndroidClient.connect(getMqttConnectOptions(), null, mConnectListener);
@@ -201,13 +203,13 @@ public class MQTTClient {
         mqttConnectOptions.setConnectionTimeout(30);
         mqttConnectOptions.setKeepAliveInterval(60);
         mqttConnectOptions.setCleanSession(true);
-        mqttConnectOptions.setUserName("admin");
-        mqttConnectOptions.setPassword("admin".toCharArray());
+        mqttConnectOptions.setUserName(USER_NAME);
+        mqttConnectOptions.setPassword(PASSWORD.toCharArray());
         //断开连接的主题
         String topic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mClientId);
         //断开的消息
         String payLoad = getDisconnectNotification(mHost, mClientId);
-        mqttConnectOptions.setWill(topic, payLoad.getBytes(), mQos, mRetained);
+        mqttConnectOptions.setWill(topic, Base64.encode(payLoad.getBytes(), Base64.DEFAULT), mQos, mRetained);
         return mqttConnectOptions;
     }
 
@@ -355,6 +357,7 @@ public class MQTTClient {
                             if (null == doorLightType) {
                                 return;
                             }
+
                             notifyCallOnOff(true);
                             mDoorLightHelper.add(doorLightType);
                             //获取队列的的所有提示消息
@@ -373,7 +376,10 @@ public class MQTTClient {
                             if (null == doorLightType) {
                                 return;
                             }
-                            notifyCallOnOff(false);
+                            //如果正在定位 就不通知关屏
+                            if (mCallTransfer == null || 0 == mCallTransfer.getFlag()) {
+                                notifyCallOnOff(false);
+                            }
                             mDoorLightHelper.remove(doorLightType);
                             //获取提示
                             mWard.setCallTip(mDoorLightHelper.getTips());
@@ -389,7 +395,6 @@ public class MQTTClient {
                 case "acceptsystemvolume":
                     if (13 == jsonObject.optInt("clienttype")) {
                         handleVolumeSet(receive);
-//                        DoorService.startService(mContext, MainActivity.VOLUME_SWITCH, receive);
                     }
                     break;
                 case "reboot":
@@ -431,7 +436,7 @@ public class MQTTClient {
                     break;
                 //同步后台跑马灯列表，防止离线 换服务器时数据不同步
                 case "marqueelist":
-                    handleMarqueeList(receive);
+                    synMarqueeList(receive);
                     break;
                 case "synpatient":
                     handleSynPatient(receive);
@@ -465,7 +470,7 @@ public class MQTTClient {
                     SystemLight volumeDay = list.get(list.size() - 1);
                     int mVolumeNight = volumeNight.getValue();
                     int mVolumeDay = volumeDay.getValue();
-                    Log.d(TAG, "volumeNightValue:" + mVolumeNight+"volumeDayValue:" + mVolumeDay);
+                    Log.d(TAG, "volumeNightValue:" + mVolumeNight + "volumeDayValue:" + mVolumeDay);
                     int mVolumeDayHour = 0;
                     int mVolumeDayMinute = 0;
                     int mVolumeNightHour = 0;
@@ -485,12 +490,12 @@ public class MQTTClient {
                     }
                     VolumeManager.getInstance(mContext).saveVolumeParam(mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
                             mVolumeNightHour, mVolumeNightMinute);
-                   DoorService.startService(mContext,MainActivity.VOLUME_SWITCH,"");
+                    DoorService.startService(mContext, MainActivity.VOLUME_SWITCH, "");
 
                 }
             }
 
-        } catch (JsonSyntaxException |NumberFormatException e) {
+        } catch (JsonSyntaxException | NumberFormatException e) {
             e.printStackTrace();
         }
     }
@@ -547,6 +552,7 @@ public class MQTTClient {
 
     /**
      * 处理呼叫转移，交由MainActivy处理对话框显示
+     * 显示定位对话框
      *
      * @param receive flag=1 显示呼叫转移对话框  flag=0 取消
      *                手动点击对话框的取消 要发送取消命令
@@ -555,8 +561,11 @@ public class MQTTClient {
         try {
             mCallTransfer = mGson.fromJson(receive, CallTransfer.class);
             if (mCallTransfer != null) {
-                notifyCallOnOff(true);
                 mMqttListener.handleCallTransfer(mCallTransfer.getDestinationname(), mCallTransfer.getFlag() != 0);
+                //如果存在其他呼叫增援等状态时，就不需要关心开关屏，否则开关屏与显示对话框同步
+                if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
+                    notifyCallOnOff(mCallTransfer.getFlag() != 0);
+                }
             }
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
@@ -571,7 +580,10 @@ public class MQTTClient {
             mCallTransfer.setFlag(0);
             String message = mGson.toJson(mCallTransfer);
             publishMessage(message, String.format(Locale.CHINA, "/shineecall/%s/broadcast", mDepartmentId));
-            notifyCallOnOff(false);
+            //如果存在其他呼叫增援等状态时，就不需要关心开关屏，否则开关屏与显示对话框同步
+            if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
+                notifyCallOnOff(false);
+            }
         }
     }
 
@@ -592,7 +604,7 @@ public class MQTTClient {
     }
 
     //处理病室患者信息的更新
-    private void  handleSynPatient(String receive) {
+    private void handleSynPatient(String receive) {
         try {
             SynPatient synPatient = mGson.fromJson(receive, SynPatient.class);
             if (synPatient != null) {
@@ -625,51 +637,131 @@ public class MQTTClient {
         }
     }
 
-    //处理单个跑马灯
+    //处理单个跑马灯，新建一个跑马灯和更新一个是不能区分的
     private void handleMarqueeInfo(String receive) {
         try {
             MarqueeInfo marqueeInfo = mGson.fromJson(receive, MarqueeInfo.class);
             if (marqueeInfo != null) {
                 switch (marqueeInfo.getType()) {
-                    //停止
+                    //停止没有开启方法，和删除是同一个意思
                     case 0:
-                        DoorScreenDataBase.getInstance(mContext).stopMarquee(marqueeInfo.getMarqueeid());
-                        DoorService.startService(mContext, MARQUEE_STOP, "");
+                    case 1:
+                        mWardDataBase.marqueeDao().stopMarquee(marqueeInfo.getMarqueeid());
+                        if (mMqttListener != null) {
+                            mMqttListener.onMarqueeUpdate();
+                        }
+//                        DoorScreenDataBase.getInstance(mContext).stopMarquee(marqueeInfo.getMarqueeid());
+//                        DoorService.startService(mContext, MARQUEE_STOP, "");
                         break;
                     //删除
-                    case 1:
-                        DoorScreenDataBase.getInstance(mContext).deleteMarquee(marqueeInfo.getMarqueeid());
-                        break;
+                   /* case 1:
+                        mWardDataBase.marqueeDao().deleteMarquee(marqueeInfo.getMarqueeid());
+                        if (mMqttListener != null) {
+                            mMqttListener.onMarqueeDelete(marqueeInfo.getMarqueeid());
+                        }
+//                        DoorScreenDataBase.getInstance(mContext).deleteMarquee(marqueeInfo.getMarqueeid());
+                        break;*/
                     //更新跑马灯
                     case 2:
-                        MarqueeInfo.DataBean data = marqueeInfo.getData();
-                        if (data != null) {
-                            DoorScreenDataBase.getInstance(mContext).insertMarquee(data, marqueeInfo.getMarqueeid());
-                            //通知后台重新检索
-                            DoorService.startService(mContext, MARQUEE_UPDATE, "");
-                        }
+//                        DoorScreenDataBase.getInstance(mContext).insertMarquee(data, marqueeInfo.getMarqueeid());
+//                        DoorService.startService(mContext, MARQUEE_UPDATE, "");
+                        updateSingleMarquee(marqueeInfo);
                         break;
                 }
+
             }
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
         }
     }
 
-    //处理跑马灯同步
-    private void handleMarqueeList(String receive) {
-        Log.d(TAG, "handleMarqueeList");
+    //更新单个跑马灯
+    private void updateSingleMarquee(MarqueeInfo marqueeInfo) {
+        List<Marquee> marquees = new ArrayList<>();
+        MarqueeInfo.DataBean data = marqueeInfo.getData();
+        if (data != null) {
+            List<MarqueeInfo.DataBean.PlaytimesBean> playTime = data.getPlaytimes();
+            if (playTime == null || playTime.size() == 0) {
+                Log.e(TAG, "invalid play times");
+                return;
+            }
+            for (MarqueeInfo.DataBean.PlaytimesBean time : playTime) {
+                if (time == null) {
+                    Log.e(TAG, "play time is null");
+                    continue;
+                }
+                Marquee marquee = new Marquee(marqueeInfo.getMarqueeid(), data.getMessage(), data.getStartdate(),
+                        data.getStopdate(), time.getStart(), time.getStop(), 0);
+                marquees.add(marquee);
+            }
+        }
+        if (marquees.size() > 0) {
+            //先删除旧的，因为新旧时间段不同导致个数不同，所以不能替换
+            mWardDataBase.marqueeDao().deleteMarquee(marqueeInfo.getMarqueeid());
+            mWardDataBase.marqueeDao().insertAll(marquees);
+            if (mMqttListener != null) {
+                mMqttListener.onMarqueeUpdate();
+            }
+        }
+    }
 
+    //同步后台跑马灯列表，防止离线 换服务器时数据不同步
+    private void synMarqueeList(String receive) {
+        Log.d(TAG, "synMarqueeList");
         try {
             MarqueeList marqueeList = mGson.fromJson(receive, MarqueeList.class);
+            //先清空数据库
+            mWardDataBase.marqueeDao().deleteAllMarquees();
             if (marqueeList != null) {
+                //把数据封装成我们需要的样子
                 List<MarqueeList.DataBean> data = marqueeList.getData();
-                DoorScreenDataBase.getInstance(mContext).updateAllMarquee(data);
-                DoorService.startService(mContext, MARQUEE_UPDATE, "");
+                List<Marquee> marquees = processMarqueeTransfer(data);
+                for (Marquee marquee : marquees) {
+                    Log.d(TAG, "marquee " + marquee.toString());
+                }
+                if (mMqttListener != null&&marquees.size()>0) {
+                    mWardDataBase.marqueeDao().insertAll(marquees);
+                    mMqttListener.onMarqueeUpdate();
+                }
             }
+
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
         }
+
+    }
+
+    /**
+     * 提取数据把跑马灯封装成我们需要的格式
+     * 跑马灯有日期和多个时间段组成，以前分开存储，现在存在一个表上,每个时间段都有跑马灯数据，会重复
+     *
+     * @param marqueeList
+     * @return
+     */
+    public List<Marquee> processMarqueeTransfer(@NonNull List<MarqueeList.DataBean> marqueeList) {
+        List<Marquee> marquees = new ArrayList<>();
+        for (MarqueeList.DataBean marqueeBean : marqueeList) {
+            if (marqueeBean == null) {
+                Log.e(TAG, "marquee is null");
+                continue;
+            }
+            List<MarqueeList.DataBean.PlaytimesBean> playtimes = marqueeBean.getPlaytimes();
+            if (playtimes == null) {
+                Log.e(TAG, "play time is null");
+                continue;
+            }
+            //根据类型判断跑马灯状态,如果不是发布状态直接忽略，停止和删除一样无效
+            if (2 != marqueeBean.getType()) {
+                continue;
+            }
+            for (MarqueeList.DataBean.PlaytimesBean time : playtimes) {
+                Marquee marquee = new Marquee(marqueeBean.getMarqueeid(), marqueeBean.getMessage(),
+                        marqueeBean.getStartdate(), marqueeBean.getStopdate(), time.getStart(), time.getStop(), 0);
+                marquees.add(marquee);
+            }
+        }
+
+        return marquees;
 
     }
 
@@ -810,7 +902,6 @@ public class MQTTClient {
     }
 
 
-
     /**
      * 更新数据库信息
      *
@@ -873,11 +964,9 @@ public class MQTTClient {
      * 没连上或与服务器断线的时候显示对话框
      */
     public void showDialog() {
-
-        if (mqttAndroidClient != null) {
+        if (mMqttListener != null) {
             mMqttListener.handleOutOfInternet();
         }
-
     }
 
 
@@ -1072,6 +1161,9 @@ public class MQTTClient {
     public void exit() {
         try {
             exiting = true;
+            if (mMqttListener != null) {
+                mMqttListener = null;
+            }
             dismissDialog();
             mDoorLightHelper.exit();
             if (mHandler != null) {
@@ -1090,9 +1182,7 @@ public class MQTTClient {
                 unSubscribe();
                 mqttAndroidClient.disconnect();
             }
-            if (mMqttListener != null) {
-                mMqttListener = null;
-            }
+
         } catch (MqttException e) {
             Log.d(TAG, "exit exception:" + e);
             e.printStackTrace();
@@ -1112,16 +1202,11 @@ public class MQTTClient {
         void handleOutOfInternet();
 
         void handleInternetRecovery();
+
+        void onMarqueeUpdate();
+
+
     }
 
 
 }
- /*if (mAlertDialog == null) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(context);
-            mAlertDialog = builder.create();
-            mAlertDialog.setTitle("与服务器断开连接");
-            mAlertDialog.setMessage("正在连接服务器");
-        }
-        if (!mAlertDialog.isShowing()) {
-            mAlertDialog.show();
-        }*/

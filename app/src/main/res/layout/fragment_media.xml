@@ -1,21 +1,26 @@
- <ViewSwitcher
-     xmlns:android="http://schemas.android.com/apk/res/android"
-     android:id="@+id/viewSwitch"
-     android:inAnimation="@anim/window_dial_pad_in"
-     android:outAnimation="@anim/window_dial_pad_out"
-     android:layout_width="match_parent"
-     android:layout_height="match_parent">
-     <VideoView
-         android:id="@+id/videoView"
-         android:layout_gravity="center"
-         android:layout_width="match_parent"
-         android:layout_height="match_parent"/>
-     <ImageSwitcher
-         android:id="@+id/imageSwitch"
-         android:inAnimation="@anim/window_dial_pad_in"
-         android:outAnimation="@anim/window_dial_pad_out"
-         android:layout_gravity="center"
-         android:layout_width="match_parent"
-         android:layout_height="match_parent"/>
- </ViewSwitcher>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    >
 
+    <ViewSwitcher
+        android:id="@+id/viewSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inAnimation="@anim/window_dial_pad_in"
+        android:outAnimation="@anim/window_dial_pad_out">
+
+        <VideoView
+            android:id="@+id/videoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"/>
+
+        <ImageSwitcher
+            android:id="@+id/imageSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:inAnimation="@anim/window_dial_pad_in"
+            android:outAnimation="@anim/window_dial_pad_out"/>
+    </ViewSwitcher>
+
+</layout>

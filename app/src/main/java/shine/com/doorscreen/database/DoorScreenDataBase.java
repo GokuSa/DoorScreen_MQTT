@@ -14,12 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import shine.com.doorscreen.entity.DoctorInfo;
 import shine.com.doorscreen.entity.DripInfo;
 import shine.com.doorscreen.entity.Elements;
-import shine.com.doorscreen.entity.NurseInfo;
-import shine.com.doorscreen.entity.PatientInfo;
-import shine.com.doorscreen.entity.PushMessage;
 import shine.com.doorscreen.entity.PushMission;
 import shine.com.doorscreen.mqtt.bean.MarqueeInfo;
 import shine.com.doorscreen.mqtt.bean.MarqueeList;
@@ -106,51 +102,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         }
     }
 
-    @Deprecated
-    public void insertMarquee2(PushMessage pushMessage) {
-        List<PushMessage.PlayTime> playTime = pushMessage.getPlayTimes();
-        if (playTime == null||playTime.size()==0) {
-            LogUtil.e(TAG,"invalid play times");
-            return;
-        }
-        SQLiteDatabase database = getWritableDatabase();
-        database.beginTransaction();
-        try {
-            //先删除要插入的旧的跑马灯id
-            int delete = database.delete(TABLE_MARQUEE_TIME, "id=?", new String[]{String.valueOf(pushMessage.getId())});
-            LogUtil.d(TAG, "delete old marque time id:" + delete);
-            //插入新的跑马灯时间
-            for (PushMessage.PlayTime time : playTime) {
-                if (time == null) {
-                    LogUtil.e(TAG,"play time is null");
-                    continue;
-                }
-                LogUtil.d(TAG, "insert  marque time :" +time.getStart());
-                ContentValues contentValues=new ContentValues();
-                contentValues.put("id", pushMessage.getId());
-                contentValues.put("startdate", pushMessage.getStartdate());
-                contentValues.put("stopdate",pushMessage.getStopdate());
-                contentValues.put("starttime", time.getStart());
-                contentValues.put("stoptime", time.getStop());
-                contentValues.put("status", 0);
-                database.insertOrThrow(TABLE_MARQUEE_TIME, null, contentValues);
-            }
-            //插入新的跑马灯信息，如果id相同直接替代
-            LogUtil.d(TAG, "insert marquee:" +pushMessage.getId());
-            ContentValues contentValues=new ContentValues();
-            contentValues.put("id",pushMessage.getId());
-            contentValues.put("message",pushMessage.getMessage());
-            contentValues.put("speed",pushMessage.getSpeed());
-            contentValues.put("status",0);
-            database.insertOrThrow(TABLE_MARQUEE, null, contentValues);
 
-            database.setTransactionSuccessful();
-        } catch (Exception e) {
-            LogUtil.e(TAG,"fail to delete or insert marquee");
-        } finally {
-            database.endTransaction();
-        }
-    }
 
     public void insertMarquee(MarqueeInfo.DataBean data,int id) {
         List<MarqueeInfo.DataBean.PlaytimesBean> playTime = data.getPlaytimes();
@@ -252,36 +204,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
             database.endTransaction();
         }
     }
-    /**
-     *
-     * @param pushMessage 要保存的数据
-     *如果要保持的对象存在就更新，否则就插入
-     */
-    public void updateOrInsert(PushMessage pushMessage) {
-        LogUtil.d(TAG, "begin to update marquee");
-        SQLiteDatabase writableDatabase = getWritableDatabase();
-        writableDatabase.beginTransaction();
-        try {
-            ContentValues contentValues=new ContentValues();
-            contentValues.put("id",pushMessage.getId());
-            contentValues.put("message",pushMessage.getMessage());
-            contentValues.put("status",0);
-            int row = writableDatabase.update(TABLE_MARQUEE, contentValues, "id=?", new String[]{String.valueOf(pushMessage.getId())});
-            if(row==1){
-                //更新成功,设置交易成功
-                writableDatabase.setTransactionSuccessful();
-            }else{
-                //更新失败，说明信息不存在，执行插入
-                long l = writableDatabase.insertOrThrow(TABLE_MARQUEE, null, contentValues);
-                LogUtil.d(TAG, "rowId:" + l);
-                writableDatabase.setTransactionSuccessful();
-            }
-        } catch (Exception e) {
-            LogUtil.e(TAG, "fail to insert or undate ");
-        }finally {
-            writableDatabase.endTransaction();
-        }
-    }
+
 
     /**
      * 停止跑马灯，更改时间表status为-1，因为检索时是根据时间表和status获取id再检索跑马灯的
@@ -359,30 +282,6 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         return messages;
     }
 
-    public List<PushMessage> getMarquee() {
-        LogUtil.d(TAG,"begin to retrieve marquee");
-        List<PushMessage> messageList= new ArrayList<>();;
-        SQLiteDatabase readableDatabase = getReadableDatabase();
-        String sql=String.format("select * from %s where status=0",TABLE_MARQUEE);
-        Cursor cursor=readableDatabase.rawQuery(sql,null);
-        try {
-            while (cursor.moveToNext()) {
-                PushMessage pushMessage=new PushMessage();
-                int id=cursor.getInt(cursor.getColumnIndex("id"));
-                String message = cursor.getString(cursor.getColumnIndex("message"));
-                pushMessage.setId(id);
-                pushMessage.setMessage(message);
-                messageList.add(pushMessage);
-            }
-        } catch (Exception e) {
-            LogUtil.e(TAG, "error while getTitle message from marquee");
-        } finally {
-            if (cursor != null&&!cursor.isClosed()) {
-                cursor.close();
-            }
-        }
-        return messageList;
-    }
 
     public void deleteMarquee(int id){
         SQLiteDatabase writableDatabase = getWritableDatabase();
@@ -721,151 +620,8 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         return dripInfos;
     }
 
-    /**
-     * 插入病人信息，由于信息是全部更新，所以先清表
-     * @param patients
-     */
-    @Deprecated
-    public void insertPatient(List<PatientInfo.Patient> patients) {
-        LogUtil.d(TAG, "begin to insert patient info");
-        if (patients == null || patients.size() == 0) {
-            LogUtil.d(TAG, "invalid patient info ");
-            return;
-        }
-        SQLiteDatabase writableDatabase = getWritableDatabase();
-        writableDatabase.beginTransaction();
-        try {
-            writableDatabase.execSQL(String.format("delete from %s",TABLE_PATIENT));
-            ContentValues contentValues = new ContentValues();
-            for (PatientInfo.Patient patient : patients) {
-                contentValues.put("name", patient.getPatientname());
-                contentValues.put("bedno", patient.getBedno());
-                writableDatabase.insertOrThrow(TABLE_PATIENT, null, contentValues);
-            }
-            writableDatabase.setTransactionSuccessful();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            writableDatabase.endTransaction();
-        }
-    }
 
-    /**
-     *
-     * @return 查询病人信息
-     */
-    @Deprecated
-    public List<PatientInfo.Patient> queryPatients() {
-        LogUtil.d(TAG,"begin to query patient");
-        List<PatientInfo.Patient> patients = new ArrayList<>();
-        SQLiteDatabase readableDatabase = getReadableDatabase();
-        String sql = String.format("select * from %s ", TABLE_PATIENT);
-        Cursor cursor = readableDatabase.rawQuery(sql, null);
-        try {
-            while (cursor.moveToNext()) {
-                String bedno=cursor.getString(cursor.getColumnIndex("bedno"));
-                String name=cursor.getString(cursor.getColumnIndex("name"));
-                PatientInfo.Patient patient=new PatientInfo.Patient(bedno,name);
-                patients.add(patient);
-            }
-        } catch (Exception e) {
-            LogUtil.d(TAG,"fail to query patient");
-        } finally {
-            if (cursor != null&&!cursor.isClosed()) {
-                cursor.close();
-            }
-        }
-        return patients;
-    }
 
-    /**
-     * 插入医生信息
-     * @param doctors
-     */
-    @Deprecated
-    public void insertDoctors(List<DoctorInfo.Doctor> doctors) {
-        LogUtil.d(TAG,"begin to insert doctor info");
-        if (doctors == null||doctors.size()==0) {
-            LogUtil.d(TAG, "invid doctor info ");
-            return;
-        }
-        SQLiteDatabase writableDatabase = getWritableDatabase();
-        writableDatabase.beginTransaction();
-        try {
-            writableDatabase.execSQL(String.format(Locale.CHINA,"delete from %s where flag=1",TABLE_DOCTOR));
-            ContentValues contentValues = new ContentValues();
-            for (DoctorInfo.Doctor doctor : doctors) {
-                contentValues.put("name",doctor.getDoctorname());
-                contentValues.put("title",doctor.getTitle());
-                contentValues.put("img",doctor.getImg());
-                contentValues.put("flag",1);
-                writableDatabase.insertOrThrow(TABLE_DOCTOR, null, contentValues);
-            }
-            writableDatabase.setTransactionSuccessful();
-        } catch (Exception e) {
-            LogUtil.e(TAG,"fail to insert doctor info");
-        } finally {
-            writableDatabase.endTransaction();
-        }
-    } /**
 
-     * 插入护士信息
-     * @param nurses
-     */
-    @Deprecated
-    public void insertNurses(List<NurseInfo.Nurse> nurses) {
-        LogUtil.d(TAG,"begin to insert nurses info");
-        if (nurses == null||nurses.size()==0) {
-            LogUtil.d(TAG, "invid doctor info ");
-            return;
-        }
-        SQLiteDatabase writableDatabase = getWritableDatabase();
-        writableDatabase.beginTransaction();
-        try {
-            writableDatabase.execSQL(String.format(Locale.CHINA,"delete from %s where flag=2",TABLE_DOCTOR));
-            ContentValues contentValues = new ContentValues();
-            for (NurseInfo.Nurse nurse : nurses) {
-                contentValues.put("name",nurse.getNursename());
-                contentValues.put("title",nurse.getTitle());
-                contentValues.put("img",nurse.getImg());
-                contentValues.put("flag",2);
-                writableDatabase.insertOrThrow(TABLE_DOCTOR, null, contentValues);
-            }
-            writableDatabase.setTransactionSuccessful();
-        } catch (Exception e) {
-            LogUtil.e(TAG,"fail to insert nurse info");
-        } finally {
-            writableDatabase.endTransaction();
-        }
-    }
-
-    /**
-     * 查询医护信息
-     * @return
-     */
-    @Deprecated
-    public List<DoctorInfo.Doctor> queryDoctor() {
-        LogUtil.d(TAG,"begin to query doctor info");
-        List<DoctorInfo.Doctor> doctors = new ArrayList<>();
-        SQLiteDatabase readableDatabase = getReadableDatabase();
-        String sql = String.format(Locale.CHINA, "select * from %s", TABLE_DOCTOR);
-        Cursor cursor = readableDatabase.rawQuery(sql, null);
-        try {
-            while (cursor.moveToNext()) {
-                String name = cursor.getString(cursor.getColumnIndex("name"));
-                String title = cursor.getString(cursor.getColumnIndex("title"));
-                String img = cursor.getString(cursor.getColumnIndex("img"));
-                DoctorInfo.Doctor doctor = new DoctorInfo.Doctor(name, title, img);
-                doctors.add(doctor);
-            }
-        } catch (Exception e) {
-            LogUtil.e(TAG,"fail to getTitle doctor info");
-        } finally {
-            if (cursor != null&&!cursor.isClosed()) {
-                cursor.close();
-            }
-        }
-        return doctors;
-    }
 
 }

@@ -1,6 +1,7 @@
 package shine.com.doorscreen.fragment;
 
 
+import android.databinding.DataBindingUtil;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
@@ -8,6 +9,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,12 +25,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import butterknife.Bind;
-import butterknife.ButterKnife;
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.database.DoorScreenDataBase;
+import shine.com.doorscreen.databinding.FragmentMediaBinding;
 import shine.com.doorscreen.entity.Elements;
-import shine.com.doorscreen.util.LogUtil;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -38,12 +38,9 @@ import shine.com.doorscreen.util.LogUtil;
 public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionListener, MediaPlayer.OnErrorListener, ViewSwitcher.ViewFactory {
     private static final String TAG = "MediaFragment";
     private static final int NEXT_PICTURE = 0;
-    @Bind(R.id.videoView)
-    VideoView mVideoView;
-    @Bind(R.id.imageSwitch)
-    ImageSwitcher mImageSwitch;
-    @Bind(R.id.viewSwitch)
-    ViewSwitcher mViewSwitch;
+   private VideoView mVideoView;
+   private ImageSwitcher mImageSwitch;
+   private ViewSwitcher mViewSwitch;
     /**
      * 需要播放的视频文件
      */
@@ -82,7 +79,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
                         //并且有视频
                         if (mVideoPath.size() > 0) {
                             if (mViewSwitch.getCurrentView().getId() != R.id.videoView) {
-                                LogUtil.d(TAG, "switch to video");
+                                Log.d(TAG, "switch to video");
                                 mViewSwitch.showNext();
                             }
                             mPictureIndex=0;
@@ -100,10 +97,12 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
             }
         }
     };
+    private FragmentMediaBinding mMediaBinding;
+
     @Override
     public void setUserVisibleHint(boolean isVisibleToUser) {
         super.setUserVisibleHint(isVisibleToUser);
-        LogUtil.d(TAG, "setUserVisibleHint: "+isVisibleToUser);
+        Log.d(TAG, "setUserVisibleHint: "+isVisibleToUser);
         isVisible=isVisibleToUser;
         if (isVisibleToUser) {
            playMedia();
@@ -114,7 +113,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
 
     private void onInVisible() {
         if (isPrepared) {
-            LogUtil.d(TAG,"停止多媒体的播放");
+            Log.d(TAG,"停止多媒体的播放");
             mVideoView.stopPlayback();
             mHandler.removeMessages(NEXT_PICTURE);
         }
@@ -123,16 +122,19 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        LogUtil.d(TAG, "onCreateView: ");
-        View view = inflater.inflate(R.layout.fragment_media, container, false);
-        ButterKnife.bind(this, view);
-        return view;
+        Log.d(TAG, "onCreateView: ");
+        mMediaBinding = DataBindingUtil.inflate(inflater, R.layout.fragment_media, container, false);
+        return mMediaBinding.getRoot();
     }
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        LogUtil.d(TAG, "onViewCreated() called with: " );
+        Log.d(TAG, "onViewCreated() called with: " );
+        mVideoView = mMediaBinding.videoView;
+        mImageSwitch = mMediaBinding.imageSwitch;
+        mViewSwitch = mMediaBinding.viewSwitch;
+
         mVideoView.setOnCompletionListener(this);
         mVideoView.setOnErrorListener(this);
         mImageSwitch.setFactory(this);
@@ -144,19 +146,19 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        LogUtil.d(TAG, "onActivityCreated: ");
+        Log.d(TAG, "onActivityCreated: ");
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        LogUtil.d(TAG, "onStart() called");
+        Log.d(TAG, "onStart() called");
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        LogUtil.d(TAG, "onResume() called");
+        Log.d(TAG, "onResume() called");
 //        playMedia();
     }
 
@@ -168,7 +170,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     private void showVideo() {
         if (mVideoPath.size() > 0) {
             File file = mVideoPath.get(mVideoIndex);
-            LogUtil.d(TAG, "file:" + file.exists() + "----file:" + file.getPath());
+            Log.d(TAG, "file:" + file.exists() + "----file:" + file.getPath());
             mVideoView.setVideoURI(Uri.fromFile(file));
             mVideoView.start();
         }
@@ -178,7 +180,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
         if (mImagePath.size() > 0) {
             File file = mImagePath.get(mPictureIndex);
             ImageView imageView = (ImageView) mImageSwitch.getNextView();
-            LogUtil.d(TAG, file.getAbsolutePath());
+            Log.d(TAG, file.getAbsolutePath());
             Glide.with(this).load(file).into(imageView);
             mImageSwitch.showNext();
             mHandler.sendEmptyMessageDelayed(NEXT_PICTURE, INTERVAL);
@@ -191,7 +193,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
      * 3.播放
      */
     public void updateMedia(String ids) {
-        LogUtil.d(TAG, "updateMedia: ");
+        Log.d(TAG, "updateMedia: ");
         mPictureIndex=0;
         mVideoIndex=0;
         if (isVisible && isPrepared) {
@@ -232,7 +234,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     }
     public void playMedia() {
         if (isVisible && isPrepared) {
-            LogUtil.d(TAG, "播放多媒体");
+            Log.d(TAG, "播放多媒体");
             //如果有视频文件就优先播
             if (mVideoPath.size() > 0) {
                 //如果当前不是视频视图就先切换一下
@@ -254,14 +256,14 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
      */
     @Override
     public void onCompletion(MediaPlayer mp) {
-        LogUtil.d(TAG, "on completion");
+        Log.d(TAG, "on completion");
         //如果是最后一个视频
         if (mVideoIndex +1==mVideoPath.size()) {
             //并且图片不为空
             if (mImagePath.size()>0) {
                 //如果当前是视频视图，应该是视频视图，先判断一下
                 if (mViewSwitch.getCurrentView().getId() != R.id.imageSwitch) {
-                    LogUtil.d(TAG, "switch to image");
+                    Log.d(TAG, "switch to image");
                     mVideoView.stopPlayback();
                     mViewSwitch.showNext();
                 }
@@ -285,32 +287,31 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     @Override
     public void onPause() {
         super.onPause();
-        LogUtil.d(TAG, "onPause() called");
+        Log.d(TAG, "onPause() called");
     }
 
 
     @Override
     public void onStop() {
         super.onStop();
-        LogUtil.d(TAG, "onStop() called");
+        Log.d(TAG, "onStop() called");
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        LogUtil.d(TAG, "onDestroyView: ");
-        ButterKnife.unbind(this);
+        Log.d(TAG, "onDestroyView: ");
     }
 
     @Override
     public void onDestroy() {
-        LogUtil.d(TAG, "onDestroy: ");
+        Log.d(TAG, "onDestroy: ");
         super.onDestroy();
     }
 
     @Override
     public void onLowMemory() {
-        LogUtil.d(TAG, "onLowMemory: ");
+        Log.d(TAG, "onLowMemory: ");
         super.onLowMemory();
     }
 
@@ -329,15 +330,15 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
      */
     @Override
     public boolean onError(MediaPlayer mp, int what, int extra) {
-        LogUtil.d(TAG, "Play Error:::onError called");
-        LogUtil.e(TAG, "what:" + what + "---extra:" + extra);
+        Log.d(TAG, "Play Error:::onError called");
+        Log.e(TAG, "what:" + what + "---extra:" + extra);
         switch (what) {
             case MediaPlayer.MEDIA_ERROR_SERVER_DIED:
-                LogUtil.d(TAG, "mVideoPath.get(mVideoIndex):" + mVideoPath.get(mVideoIndex));
-                LogUtil.e(TAG,"Play Error::: MEDIA_ERROR_SERVER_DIED");
+                Log.d(TAG, "mVideoPath.get(mVideoIndex):" + mVideoPath.get(mVideoIndex));
+                Log.e(TAG,"Play Error::: MEDIA_ERROR_SERVER_DIED");
                 break;
             case MediaPlayer.MEDIA_ERROR_UNKNOWN:
-                LogUtil.e(TAG,"Play Error::: MEDIA_ERROR_UNKNOWN");
+                Log.e(TAG,"Play Error::: MEDIA_ERROR_UNKNOWN");
                 break;
         }
         return true;

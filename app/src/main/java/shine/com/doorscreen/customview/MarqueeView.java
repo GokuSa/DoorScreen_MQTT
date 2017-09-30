@@ -333,7 +333,7 @@ public class MarqueeView extends LinearLayout {
         mTextField = (TextView) getChildAt(0);
         removeView(mTextField);
         ScrollView.LayoutParams layoutParams = new ScrollView.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        layoutParams.setMargins(1350,0,0,0);
+        layoutParams.setMargins(1300,0,0,0);
         mScrollView.addView(mTextField, layoutParams);
 //        mScrollView.addView(mTextField, new ScrollView.LayoutParams(TEXTVIEW_VIRTUAL_WIDTH, LayoutParams.WRAP_CONTENT));
 

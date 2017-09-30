@@ -41,24 +41,20 @@ android {
     dataBinding{
         enabled=true
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
-    // Because RxAndroid releases are few and far between, it is recommended you also
-// explicitly depend on RxJava's latest version for bug fixes and new features.
-    //facebook 调试工具
-    //    compile 'com.facebook.stetho:stetho:1.4.0'
     compile 'com.android.support:appcompat-v7:'+rootProject.supportLibVersion
     compile 'com.google.code.gson:gson:2.8.1'
     compile 'com.github.bumptech.glide:glide:3.7.0'
     compile 'com.android.support:recyclerview-v7:'+rootProject.supportLibVersion
     compile 'com.android.support:gridlayout-v7:'+rootProject.supportLibVersion
-    compile 'io.reactivex:rxandroid:1.2.1'
-    compile 'io.reactivex:rxjava:1.1.6'
-    compile 'com.jakewharton.rxbinding:rxbinding:0.4.0'
     compile 'com.android.support:support-v4:'+rootProject.supportLibVersion
-    compile 'com.jakewharton:butterknife:7.0.1'
     compile 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.1.0'
     compile 'org.eclipse.paho:org.eclipse.paho.android.service:1.1.1'
 
@@ -69,4 +65,7 @@ dependencies {
     compile 'android.arch.lifecycle:runtime:'+rootProject.lifecycleVersion
     compile 'android.arch.lifecycle:extensions:'+rootProject.lifecycleVersion
     annotationProcessor 'android.arch.lifecycle:compiler:'+rootProject.lifecycleVersion
+
+    testCompile 'junit:junit:4.12'
+
 }

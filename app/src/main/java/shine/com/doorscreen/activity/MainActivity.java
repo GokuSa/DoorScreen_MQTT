@@ -5,17 +5,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
-
-import com.google.gson.Gson;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -70,9 +68,6 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
     private static final String TAG = "MainActivity";
     //宣教信息下載廣播action
     public static final String MEDIA_ACTION = "com.action.media";
-    //存储目录
-    public static final String MOVIE_PATH = "/storage/emulated/legacy/Movies";
-    public static final String PICTURE_PATH = "/storage/emulated/legacy/Pictures";
     public static final int CONNECT_SERVER = 0;
     public static final int MARQUEE_UPDATE = 1;
     public static final int MARQUEE_STOP = 2;
@@ -110,7 +105,6 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
     //视频和图片目录
     private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
     private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-    private Gson mGson = new Gson();
 
     /**
      * 门口屏信息主要界面
@@ -149,7 +143,6 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
         //创建视频和图片下载目录
         setLocalStorage();
         mMQTTClient = new MQTTClient(this);
-
 //        网络连接状态变化广播监听
         if (Common.isNetworkAvailable(this)) {
             isConnected = true;
@@ -171,10 +164,12 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
      */
     private void showOutOfInternetDialog() {
         WaitingDialog dialog = (WaitingDialog) getSupportFragmentManager().findFragmentByTag("dialog_out_of_internet");
-        if (dialog == null) {
-            dialog = WaitingDialog.newInstance("");
+        FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        if (dialog != null) {
+            fragmentTransaction.remove(dialog);
         }
-        dialog.show(getSupportFragmentManager(), "dialog_out_of_internet");
+        dialog = WaitingDialog.newInstance("");
+        dialog.show(fragmentTransaction, "dialog_out_of_internet");
     }
 
     /**
@@ -285,12 +280,8 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
     private BroadcastReceiver mNetWorkReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            ConnectivityManager connMgr = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            //获取有线网的信息
-            NetworkInfo ethernet = connMgr.getNetworkInfo(ConnectivityManager.TYPE_ETHERNET);
-            Log.d(TAG, "网络是否可用:" + ethernet.isConnected());
             //只联一次，startConnect不能重复启动
-            if (ethernet.isConnected() && !isConnected) {
+            if (Common.isNetworkAvailable(MainActivity.this) && !isConnected) {
                 isConnected = true;
                 mMQTTClient.startConnect(MainActivity.this);
             }
@@ -336,7 +327,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
                     }
                     break;
                 case SCAN_MARQUEE:
-                    String paramMarquee = intent.getStringExtra("param");
+                   /* String paramMarquee = intent.getStringExtra("param");
                     if (TextUtils.isEmpty(paramMarquee)) {
                         if (isMarqueePlaying) {
                             isMarqueePlaying = false;
@@ -345,7 +336,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
                     } else {
                         isMarqueePlaying = true;
                         mDoorFragment.updateMarquee(paramMarquee);
-                    }
+                    }*/
                     break;
             }
         }
@@ -367,7 +358,6 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mReceiver);
         unregisterReceiver(mNetWorkReceiver);
         stopService(DoorService.newIntent(this, -1, ""));
-//        System.exit(0);
     }
 
     /**
@@ -422,4 +412,12 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
             fragment.show(getSupportFragmentManager(), "call_transfer");
         }
     }
+
+
+    @Override
+    public void onMarqueeUpdate() {
+        mDoorFragment.updateMarquee();
+    }
+
+
 }

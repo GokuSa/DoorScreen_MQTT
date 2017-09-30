@@ -70,7 +70,7 @@ public class MarqueeList {
          */
 
         private int type;
-        private String marqueeid;
+        private int marqueeid;
         private String message;
         private String startdate;
         private String stopdate;
@@ -97,11 +97,11 @@ public class MarqueeList {
             this.type = type;
         }
 
-        public String getMarqueeid() {
+        public int getMarqueeid() {
             return marqueeid;
         }
 
-        public void setMarqueeid(String marqueeid) {
+        public void setMarqueeid(int marqueeid) {
             this.marqueeid = marqueeid;
         }
 

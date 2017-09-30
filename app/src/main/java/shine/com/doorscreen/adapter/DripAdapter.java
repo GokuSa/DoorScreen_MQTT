@@ -1,6 +1,7 @@
 package shine.com.doorscreen.adapter;
 
 import android.content.Context;
+import android.databinding.DataBindingUtil;
 import android.graphics.Typeface;
 import android.support.annotation.NonNull;
 import android.support.v4.content.LocalBroadcastManager;
@@ -11,8 +12,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.TranslateAnimation;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextSwitcher;
 import android.widget.TextView;
 import android.widget.ViewSwitcher;
@@ -21,10 +20,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import butterknife.Bind;
-import butterknife.ButterKnife;
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
+import shine.com.doorscreen.databinding.ItemDripBinding;
 import shine.com.doorscreen.entity.DripInfo;
 
 /**
@@ -88,8 +86,9 @@ public class DripAdapter extends RecyclerView.Adapter<DripAdapter.DripHolder> {
 
     @Override
     public DripHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_drip, parent, false);
-        return new DripHolder(view,mContext);
+//        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_drip, parent, false);
+        ItemDripBinding binding = DataBindingUtil.inflate(LayoutInflater.from(parent.getContext()), R.layout.item_drip, parent, false);
+        return new DripHolder(binding,mContext);
     }
 
     @Override
@@ -104,7 +103,7 @@ public class DripAdapter extends RecyclerView.Adapter<DripAdapter.DripHolder> {
     }
 
     static class DripHolder extends RecyclerView.ViewHolder implements ViewSwitcher.ViewFactory {
-        @Bind(R.id.tv_drip_title)
+      /*  @Bind(R.id.tv_drip_title)
         TextView mTvDripTitle;
         @Bind(R.id.tv_time_left)
         TextView mTvTimeLeft;
@@ -121,57 +120,57 @@ public class DripAdapter extends RecyclerView.Adapter<DripAdapter.DripHolder> {
         @Bind(R.id.iv_water_drip)
         ImageView mIvWaterDrip;
         @Bind(R.id.tv_drip_info)
-        TextView mTvDripInfo;
+        TextView mTvDripInfo;*/
         private Context context;
-
-         DripHolder(View itemView,Context context) {
-            super(itemView);
+        private final ItemDripBinding mDripBinding;
+         DripHolder(ItemDripBinding binding,Context context) {
+            super(binding.getRoot());
             this.context = context;
-            ButterKnife.bind(this, itemView);
-            mTextSwitchLeft.setFactory(this);
-            mTextSwitchRight.setFactory(this);
-            mTextSwitchMiddle.setFactory(this);
+             mDripBinding = binding;
+            mDripBinding.textSwitchLeft.setFactory(this);
+            mDripBinding.textSwitchRight.setFactory(this);
+            mDripBinding.textSwitchMiddle.setFactory(this);
+//            mTextSwitchRight.setFactory(this);
+//            mTextSwitchMiddle.setFactory(this);
         }
 
         public void bind(DripInfo.Infusionwarnings warningBean) {
+             boolean isSelected=false;
             if (warningBean.getLeft() <= 3) {
-                mTvDripTitle.setSelected(true);
-                mLlTimeBoard.setSelected(true);
-                mTvTimeLeft.setSelected(true);
-            }else{
-                mTvDripTitle.setSelected(false);
-                mLlTimeBoard.setSelected(false);
-                mTvTimeLeft.setSelected(false);
+                isSelected=true;
             }
-            mTvDripTitle.setText(warningBean.getBedno());
-            mTvDripInfo.setText(String.format(Locale.CHINA,"开始时间\n%s\n%s滴/分钟",warningBean.getBegin(),
+            mDripBinding.tvDripTitle.setSelected(isSelected);
+            mDripBinding.llTimeBoard.setSelected(isSelected);
+            mDripBinding.tvTimeLeft.setSelected(isSelected);
+            mDripBinding.tvDripTitle.setText(warningBean.getBedno());
+            mDripBinding.tvDripInfo.setText(String.format(Locale.CHINA,"开始时间\n%s\n%s滴/分钟",warningBean.getBegin(),
                     warningBean.getSpeed()));
             int dripPackageResourceId=warningBean.getCurrentDripPackage();
             if (dripPackageResourceId != -1) {
-                mIvDripPackage.setImageDrawable(context.getResources().getDrawable(dripPackageResourceId));
+                mDripBinding.ivDripPackage.setImageDrawable(context.getResources().getDrawable(dripPackageResourceId));
             }
 
             if (warningBean.getCurrent_bai() == warningBean.getNext_bai()) {
-                mTextSwitchLeft.setCurrentText(String.valueOf(warningBean.getCurrent_bai()));
+                mDripBinding.textSwitchLeft.setCurrentText(String.valueOf(warningBean.getCurrent_bai()));
             } else {
-                mTextSwitchLeft.setText(String.valueOf(warningBean.getNext_bai()));
+                mDripBinding.textSwitchLeft.setText(String.valueOf(warningBean.getNext_bai()));
             }
             if (warningBean.getCurrent_shi()==warningBean.getNext_shi()) {
-                mTextSwitchMiddle.setCurrentText(String.valueOf(warningBean.getCurrent_shi()));
+                mDripBinding.textSwitchMiddle.setCurrentText(String.valueOf(warningBean.getCurrent_shi()));
             }else{
-                mTextSwitchMiddle.setText(String.valueOf(warningBean.getNext_shi()));
+                mDripBinding.textSwitchMiddle.setText(String.valueOf(warningBean.getNext_shi()));
             }
             //个位数的动画出现跳跃，显示的是x，出去的是X+1，进来的是x-1，所以先设置当前量，再切换
-            mTextSwitchRight.setCurrentText(String.valueOf(warningBean.getCurrent_ge()));
+            mDripBinding.textSwitchRight.setCurrentText(String.valueOf(warningBean.getCurrent_ge()));
             if (warningBean.getLeft() > 0) {
-                mTextSwitchRight.setText(String.valueOf(warningBean.getNext_ge()));
-                if (mIvWaterDrip.getAnimation() == null) {
-                    mIvWaterDrip.setAnimation(getAnimation(1500));
+                mDripBinding.textSwitchRight.setText(String.valueOf(warningBean.getNext_ge()));
+                if ( mDripBinding.ivWaterDrip.getAnimation() == null) {
+                    mDripBinding.ivWaterDrip.setAnimation(getAnimation(1500));
                 }
             }else{
-                mTextSwitchRight.setText("0");
-                mIvWaterDrip.clearAnimation();
-                mIvWaterDrip.setVisibility(View.INVISIBLE);
+                mDripBinding.textSwitchRight.setText("0");
+                mDripBinding.ivWaterDrip.clearAnimation();
+                mDripBinding.ivWaterDrip.setVisibility(View.INVISIBLE);
             }
 
         }

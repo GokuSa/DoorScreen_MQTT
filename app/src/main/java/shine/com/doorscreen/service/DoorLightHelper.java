@@ -205,15 +205,6 @@ public class DoorLightHelper {
     public void add(DoorLightType doorLight) {
         boolean found=false;
         for (DoorLightType light : mDoorLightTypes) {
-            //如果优先级相同，后来的替换之前的
-           /* if (light.priority == doorLight.priority) {
-                found=true;
-                light.mac=doorLight.mac;
-                light.instruction=doorLight.instruction;
-                light.tip=doorLight.tip;
-                //找到了就不需循环了，只有一个
-                break;
-            }*/
             //看有没有已存在的指令，如果有，并且优先级低，替换
             if (light.mac.equals(doorLight.mac)) {
                 found=true;
