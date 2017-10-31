@@ -33,7 +33,6 @@ import shine.com.doorscreen.adapter.InsetDecoration;
 import shine.com.doorscreen.adapter.PatientAdapter2;
 import shine.com.doorscreen.adapter.RecycleViewDivider;
 import shine.com.doorscreen.adapter.StaffAdapter;
-import shine.com.doorscreen.database.DoorScreenDataBase;
 import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.databinding.FragmentDoor2Binding;
 import shine.com.doorscreen.entity.DripInfo;
@@ -123,10 +122,10 @@ public class DoorFragment extends LifecycleFragment {
                     }*/
                     break;
                 case MSG_MARQUEE_ADD:
-                    mBinding.fl.add((Marquee) msg.obj);
+                    mBinding.marqueeView.add((Marquee) msg.obj);
                     break;
                 case MSG_MARQUEE_REMOVE:
-                    mBinding.fl.delete((Marquee) msg.obj);
+                    mBinding.marqueeView.delete((Marquee) msg.obj);
                     break;
                 case MSG_SCHEDULE_MARQUEES:
                     scheduleMarquees();
@@ -290,7 +289,7 @@ public class DoorFragment extends LifecycleFragment {
     public void onDestroyView() {
         super.onDestroyView();
         Log.d(TAG, "onDestroyView: ");
-        mBinding.fl.stopMarquee();
+        mBinding.marqueeView.stopMarquee();
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -378,7 +377,7 @@ public class DoorFragment extends LifecycleFragment {
         mHandler.sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, calendar.getTimeInMillis() - current);
     }
 
-    //同步本地时间
+    //同步本地时间，todo 与时间相关的操作需要从新规划
     public void synLocalTime() {
         mHandler.post(new Runnable() {
             @Override
@@ -512,30 +511,6 @@ public class DoorFragment extends LifecycleFragment {
         }*/
     }
 
-
-    @Deprecated
-    public void updateMarquee(String paramMarquee) {
-        List<String> content = DoorScreenDataBase.getInstance(getActivity()).queryMarquee(paramMarquee);
-        mMarquees.clear();
-        mMarquees.addAll(content);
-        if (isVisible && mMarquees.size() > 0) {
-//            mMarqueeView.setContent(content);
-        }
-
-    }
-
-    /**
-     * 停止跑马灯
-     *
-     * @param
-     */
-    @Deprecated
-    public void stopMarquee() {
-        if (isVisible) {
-//            mMarqueeView.terminate();
-        }
-    }
-
     private List<Marquee> mMarqueeList = new ArrayList<>();
     /*
     *  1. 同步与服务器的跑马灯
@@ -570,9 +545,9 @@ public class DoorFragment extends LifecycleFragment {
         }
 
         if (mMarqueeList.size() > 0) {
-            mBinding.fl.startMarquee(mMarqueeList);
+            mBinding.marqueeView.startMarquee(mMarqueeList);
         } else {
-            mBinding.fl.stopMarquee();
+            mBinding.marqueeView.stopMarquee();
         }
     }
 

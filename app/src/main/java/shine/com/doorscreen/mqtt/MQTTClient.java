@@ -69,6 +69,11 @@ import static shine.com.doorscreen.util.Common.getMacAddress;
  * 时间:2017/6/29
  * qq:1220289215
  * 类描述：mqtt通讯客户端
+ * 1.需要设置用户名和密码
+ * <p>
+ * <p>
+ * 网络通信处理有待优化
+ * 统一信息处理方式，在HandlerThread 的子线程处理
  */
 
 public class MQTTClient {
@@ -95,7 +100,7 @@ public class MQTTClient {
     /**
      * 主机地址
      */
-    private String mHost;
+    private String mHost = "";
     /**
      * 主机mac
      */
@@ -142,10 +147,13 @@ public class MQTTClient {
         handlerThread.start();
         mHandler = new Handler(handlerThread.getLooper());
 
+//        从本地获取服务器的IP和端口
         IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
         String serverIp = inir.getValue("commuip");
-        mHost = inir.getValue("ip");
         String port = inir.getValue("commuport");
+//        没有网线连接的时候 此方法获取的IP无效
+        mHost = inir.getValue("ip");
+//        MQTT需要的格式化地址
         final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
 //        final String serverUri = "tcp://172.168.1.9:1883";
 //        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
@@ -213,9 +221,6 @@ public class MQTTClient {
         return mqttConnectOptions;
     }
 
-    /**
-     * 连接服务器监听
-     */
 
     private DisconnectedBufferOptions getBufferOpt() {
         DisconnectedBufferOptions disconnectedBufferOptions = new DisconnectedBufferOptions();
@@ -226,7 +231,9 @@ public class MQTTClient {
         return disconnectedBufferOptions;
     }
 
-
+    /**
+     * 连接服务器监听
+     */
     private IMqttActionListener mConnectListener = new IMqttActionListener() {
         @Override
         public void onSuccess(IMqttToken asyncActionToken) {
@@ -264,6 +271,7 @@ public class MQTTClient {
             }
         }
     };
+
     private MqttCallbackExtended mCallbackExtended = new MqttCallbackExtended() {
         @Override
         public void connectComplete(boolean reconnect, String serverURI) {
@@ -317,7 +325,7 @@ public class MQTTClient {
                 //后台发来的转组通知
                 case "transferinsystem":
                     try {
-                        Transfer transfer = new Gson().fromJson(receive, Transfer.class);
+                        Transfer transfer = mGson.fromJson(receive, Transfer.class);
                         if (transfer != null) {
                             handleTranfer(transfer.getDepartid(), transfer.getRoomid());
                         }
@@ -326,7 +334,7 @@ public class MQTTClient {
                     }
                     break;
                 case "transfer":
-                    handleCallTransfer(receive);
+                    handleCallTransfer(receive, action, jsonObject);
                     break;
                 //删除床位
                 case "deletefromsystem":
@@ -359,7 +367,9 @@ public class MQTTClient {
                             }
 
                             notifyCallOnOff(true);
-                            mDoorLightHelper.add(doorLightType);
+//                            添加到门灯显示队列，由其根据优先级负责正确的显示
+                            mDoorLightHelper.put(doorLightType);
+//                            mDoorLightHelper.add(doorLightType);
                             //获取队列的的所有提示消息
                             mWard.setCallTip(mDoorLightHelper.getTips());
                             mWardDataBase.ward().insert(mWard);
@@ -376,14 +386,20 @@ public class MQTTClient {
                             if (null == doorLightType) {
                                 return;
                             }
-                            //如果正在定位 就不通知关屏
-                            if (mCallTransfer == null || 0 == mCallTransfer.getFlag()) {
-                                notifyCallOnOff(false);
-                            }
+
+//                                从门灯队列移除一个，重新显示队列门灯
                             mDoorLightHelper.remove(doorLightType);
                             //获取提示
                             mWard.setCallTip(mDoorLightHelper.getTips());
                             mWardDataBase.ward().insert(mWard);
+                            //没有定位 或有其他呼叫
+                            if (mCallTransfer == null || 0 == mCallTransfer.getFlag()) {
+                                //没有呼叫
+                                if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
+//                                    通知关屏
+                                    notifyCallOnOff(false);
+                                }
+                            }
                         }
                     });
 
@@ -460,7 +476,7 @@ public class MQTTClient {
      */
     private void handleVolumeSet(String json) {
         try {
-            SystemInfo systemVolume = new Gson().fromJson(json, SystemInfo.class);
+            SystemInfo systemVolume = mGson.fromJson(json, SystemInfo.class);
             if (systemVolume != null) {
                 List<SystemLight> list = systemVolume.getDatalist();
                 if (list != null && list.size() > 1) {
@@ -554,10 +570,12 @@ public class MQTTClient {
      * 处理呼叫转移，交由MainActivy处理对话框显示
      * 显示定位对话框
      *
-     * @param receive flag=1 显示呼叫转移对话框  flag=0 取消
-     *                手动点击对话框的取消 要发送取消命令
+     * @param receive    flag=1 显示呼叫转移对话框  flag=0 取消
+     *                   手动点击对话框的取消 要发送取消命令
+     * @param action
+     * @param jsonObject
      */
-    private void handleCallTransfer(String receive) {
+    private void handleCallTransfer(String receive, String action, JSONObject jsonObject) {
         try {
             mCallTransfer = mGson.fromJson(receive, CallTransfer.class);
             if (mCallTransfer != null) {
@@ -566,6 +584,26 @@ public class MQTTClient {
                 if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
                     notifyCallOnOff(mCallTransfer.getFlag() != 0);
                 }
+                DoorLightHelper.DoorLightType doorLightType = getDoorLightType(action, jsonObject);
+                //如果不是期望的类型返回为空
+                if (null == doorLightType) {
+                    return;
+                }
+                Log.d(TAG, "handleCallTransfer " + doorLightType.toString());
+
+                //显示呼叫转移，显示之前会取消之前的呼叫
+                if (mCallTransfer.getFlag() == 1) {
+//                    mDoorLightHelper.add(doorLightType);
+                    mDoorLightHelper.put(doorLightType);
+                } else {
+//                    取消呼叫转移
+//                    mDoorLightHelper.remove(doorLightType);
+                    mDoorLightHelper.removeCallTransfer();
+                }
+                //获取队列的的所有提示消息
+                mWard.setCallTip(mDoorLightHelper.getTips());
+                mWardDataBase.ward().insert(mWard);
+
             }
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
@@ -578,12 +616,15 @@ public class MQTTClient {
     public void handleCancelCallTransfer() {
         if (mCallTransfer != null) {
             mCallTransfer.setFlag(0);
+            mCallTransfer.setSender("station");
             String message = mGson.toJson(mCallTransfer);
+            Log.d(TAG, "cancle call transfer" + message);
             publishMessage(message, String.format(Locale.CHINA, "/shineecall/%s/broadcast", mDepartmentId));
             //如果存在其他呼叫增援等状态时，就不需要关心开关屏，否则开关屏与显示对话框同步
             if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
                 notifyCallOnOff(false);
             }
+
         }
     }
 
@@ -716,10 +757,10 @@ public class MQTTClient {
                 //把数据封装成我们需要的样子
                 List<MarqueeList.DataBean> data = marqueeList.getData();
                 List<Marquee> marquees = processMarqueeTransfer(data);
-                for (Marquee marquee : marquees) {
+               /* for (Marquee marquee : marquees) {
                     Log.d(TAG, "marquee " + marquee.toString());
-                }
-                if (mMqttListener != null&&marquees.size()>0) {
+                }*/
+                if (mMqttListener != null && marquees.size() > 0) {
                     mWardDataBase.marqueeDao().insertAll(marquees);
                     mMqttListener.onMarqueeUpdate();
                 }
@@ -838,6 +879,8 @@ public class MQTTClient {
     }
 
     /**
+     * Incoming message: {"destinationname":"1床","destinationmac":"E06417180956","destinationip":"","action":"transfer","stationip":"172.168.32.114","stationmac":"E06420173214","sender":"station","flag":0}
+     *
      * @param action     其他设备发出的服务类型，如 增援，呼叫，输液提醒
      * @param jsonObject 判读优先级，具体设备的数据
      * @return
@@ -863,6 +906,10 @@ public class MQTTClient {
         }
         String clientmac = jsonObject.optString("clientmac");
         String clientname = jsonObject.optString("clientname");
+        //如果是护士站发来的呼叫转移，需要获取destinationmac，而不是clientmac
+        if ("station".equals(sender) && "transfer".equals(action)) {
+            clientmac = jsonObject.optString("destinationmac");
+        }
         doorLightType.setClientmac(clientmac);
         switch (action) {
             //增援
@@ -886,10 +933,13 @@ public class MQTTClient {
                     doorLightType.setInstruction(mContext.getResources().getString(R.string.long_blue));
                 }
                 break;
-            case "position":
-                doorLightType.setPriority(5);
+//            case "position":
+//                呼叫转移
+            case "transfer":
+                doorLightType.setPriority(4);
+                doorLightType.setCurrentTime(System.currentTimeMillis());
                 doorLightType.setInstruction(mContext.getResources().getString(R.string.long_green));
-                doorLightType.setTip(clientname + "已定位");
+                doorLightType.setTip(clientname + "呼叫转移");
                 break;
             case "cancelposition":
             case "finish":

@@ -1,28 +1,35 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion "25.0.2"
+    compileSdkVersion 26
+    buildToolsVersion "26.0.2"
 
     defaultConfig {
         applicationId "shine.com.doorscreen"
         minSdkVersion 14
-        targetSdkVersion 25
+        targetSdkVersion 26
         versionCode 1
         versionName "1.0"
-
+        multiDexEnabled true
+        jackOptions {
+            enabled true
+        }
     }
-
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/notice.txt'
+    }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
     sourceSets {
         main {
-
-
             jniLibs.srcDirs = ['libs']
         }
 
@@ -62,7 +69,7 @@ dependencies {
     annotationProcessor 'android.arch.persistence.room:compiler:'+rootProject.roomVersion
 //    compile 'android.arch.persistence.room:rxjava2:1.0.0-alpha3'
 
-    compile 'android.arch.lifecycle:runtime:'+rootProject.lifecycleVersion
+//    compile 'android.arch.lifecycle:runtime:'+rootProject.lifecycleVersion
     compile 'android.arch.lifecycle:extensions:'+rootProject.lifecycleVersion
     annotationProcessor 'android.arch.lifecycle:compiler:'+rootProject.lifecycleVersion
 

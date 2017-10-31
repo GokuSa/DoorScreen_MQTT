@@ -25,6 +25,7 @@ public class CallTransfer {
     private String action;
     private String stationip;
     private String stationmac;
+    private String sender = "";
     //1:设置转移，0：取消转移
     private int flag;
 
@@ -82,5 +83,9 @@ public class CallTransfer {
 
     public void setDestinationname(String destinationname) {
         this.destinationname = destinationname;
+    }
+
+    public void setSender(String sender) {
+        this.sender = sender;
     }
 }

@@ -7,13 +7,17 @@ import android.support.v7.widget.AppCompatTextView;
 import android.text.TextPaint;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
+import android.widget.FrameLayout;
 import android.widget.OverScroller;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.mqtt.bean.Marquee;
+import shine.com.doorscreen.util.Common;
 
 /**
  * author:
@@ -34,6 +38,8 @@ public class MarqueeTextView extends AppCompatTextView {
     //动画时长 与文字长度有关
     private int mDuration = 5000;
     private int mStartX=1200;
+    private int mScreenWidth=0;
+
     public MarqueeTextView(Context context) {
         super(context);
         init(context);
@@ -56,6 +62,8 @@ public class MarqueeTextView extends AppCompatTextView {
         mTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         float textSize = getTextSize();
         mTextPaint.setTextSize(textSize);
+        mScreenWidth = Common.getScreenWidth(context);
+        Log.d(TAG, "mScreenWidth:" + mScreenWidth);
     }
 
 
@@ -91,15 +99,23 @@ public class MarqueeTextView extends AppCompatTextView {
         }
     }
 
-
-
-
     private void startScroll() {
         isStop=false;
         mIndex = ++mIndex % mMarquees.size();
         String content = mMarquees.get(mIndex).getMessage();
         setText(content);
-        int measureText = (int) mTextPaint.measureText(content);
+        //考虑左右边距，否则显示不全
+        int measureText = (int) mTextPaint.measureText(content)+getPaddingLeft()+getPaddingRight();
+        Log.d(TAG, "content of marquee "+content+"length "+measureText);
+        //设置布局参数，否则文字超过父控件文字不能显示
+        FrameLayout.LayoutParams layoutParams=null;
+        if (measureText > mScreenWidth) {
+            layoutParams = new FrameLayout.LayoutParams(measureText, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }else{
+            layoutParams=new FrameLayout.LayoutParams(mScreenWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        layoutParams.gravity=Gravity.CENTER_VERTICAL;
+        setLayoutParams(layoutParams);
         mDuration=(mStartX+measureText)*6;
         mOverScroller.startScroll(-mStartX, 0, mStartX+measureText, 0, mDuration);
         invalidate();

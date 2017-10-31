@@ -5,6 +5,7 @@ import android.arch.persistence.room.Entity;
 import android.arch.persistence.room.Ignore;
 import android.arch.persistence.room.PrimaryKey;
 import android.provider.BaseColumns;
+import android.support.annotation.NonNull;
 
 import shine.com.doorscreen.util.Common;
 
@@ -23,6 +24,7 @@ public class Patient {
     private String doctorname;
     //床头屏mac地址
     @PrimaryKey
+    @NonNull
     private String clientmac;
     private boolean isCalling;
 

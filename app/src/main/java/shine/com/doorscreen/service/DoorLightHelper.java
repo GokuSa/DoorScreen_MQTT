@@ -8,6 +8,7 @@ import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Iterator;
 import java.util.TreeSet;
 
 import android_serialport_api.SerialPort;
@@ -56,10 +57,10 @@ public class DoorLightHelper {
 
     private void initialize() {
         File file = new File(PATH);
-        boolean isGranted = true;
+//        boolean isGranted = true;
         if (!file.canRead() || !file.canWrite()) {
             RootCommand rootCommand = new RootCommand();
-            isGranted = rootCommand.grand(file.getAbsolutePath());
+           rootCommand.grand(file.getAbsolutePath());
         }
         Log.d(TAG, "can Read " + file.canRead() + "canWrite" + file.canWrite());
         if (file.canRead() && file.canWrite()) {
@@ -125,9 +126,9 @@ public class DoorLightHelper {
         public int compareTo(@NonNull DoorLightType o) {
             //根据优先级排序，数字越小排序越靠前
             int result=this.priority - o.priority;
-            //优先权相同，比较时间
+            //优先权相同，比较时间,最新的靠前
             if (result == 0) {
-                return (int)(this.currentTime-o.currentTime);
+                return (int)(o.currentTime-this.currentTime);
             }
             return result;
         }
@@ -157,6 +158,7 @@ public class DoorLightHelper {
                     "privilidge=" + priority +
                     ", clientmac='" + mac + '\'' +
                     ", instruction='" + instruction + '\'' +
+                    ", currentTime='" + currentTime + '\'' +
                     '}';
         }
 
@@ -205,7 +207,7 @@ public class DoorLightHelper {
     public void add(DoorLightType doorLight) {
         boolean found=false;
         for (DoorLightType light : mDoorLightTypes) {
-            //看有没有已存在的指令，如果有，并且优先级低，替换
+            //看有没有已存在的指令，如果有，并且优先级比新加的高，替换
             if (light.mac.equals(doorLight.mac)) {
                 found=true;
                 if (light.priority > doorLight.priority) {
@@ -225,6 +227,19 @@ public class DoorLightHelper {
         handleInstruction(mDoorLightTypes.first().instruction);
     }
 
+    public void put(DoorLightType doorLight) {
+        for (DoorLightType light : mDoorLightTypes) {
+            //如果队列中有低级别的其他门灯指令 移除
+            if (light.mac.equals(doorLight.mac)&&light.priority > doorLight.priority) {
+                mDoorLightTypes.remove(light);
+                break;
+            }
+        }
+        mDoorLightTypes.add(doorLight);
+        Log.d(TAG, "DoorLightTypes " + mDoorLightTypes.toString());
+        handleInstruction(mDoorLightTypes.first().instruction);
+    }
+
 
     public void remove(DoorLightType doorLightType) {
         //根据mac找到对应的指令
@@ -233,6 +248,39 @@ public class DoorLightHelper {
             if (lightType.mac.equals(doorLightType.mac)) {
                 mDoorLightTypes.remove(lightType);
                 break;
+            }
+        }
+        Log.d(TAG, "DoorLightTypes " + mDoorLightTypes.toString());
+        if (mDoorLightTypes.size() > 0) {
+            handleInstruction(mDoorLightTypes.first().instruction);
+        } else {
+            handleInstruction("7E1001000000000000000000000000010001000011AA");
+        }
+    }
+
+    //取消有不同床头屏发送，mac地址不唯一，不能像其他呼叫一样通过mac判断
+    public void removeCallTransfer() {
+        for (DoorLightType lightType : mDoorLightTypes) {
+            //呼叫转移暂且根据优先级删除
+            if (lightType.priority==4) {
+                mDoorLightTypes.remove(lightType);
+                break;
+            }
+        }
+        Log.d(TAG, "DoorLightTypes " + mDoorLightTypes.toString());
+        if (mDoorLightTypes.size() > 0) {
+            handleInstruction(mDoorLightTypes.first().instruction);
+        } else {
+            handleInstruction("7E1001000000000000000000000000010001000011AA");
+        }
+    }
+
+    //取消定位时 移除所有的呼叫转移门灯指令
+    public void removeAllCallTransfer() {
+        Iterator<DoorLightType> iterator = mDoorLightTypes.iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next().getPrivilidge()==4) {
+                iterator.remove();
             }
         }
         Log.d(TAG, "DoorLightTypes " + mDoorLightTypes.toString());
