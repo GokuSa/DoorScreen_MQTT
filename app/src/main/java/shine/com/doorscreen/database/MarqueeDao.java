@@ -36,7 +36,7 @@ public interface MarqueeDao {
     @Query("delete from marquee")
     void deleteAllMarquees();
 
-    //检索当天在有效日期内的跑马灯，到明天零点需再次更新，具体是否在当天有效时间内会每分钟检索一次
+    //检索当天在有效日期内的跑马灯，到明天零点需再次检索
     @Query("select * from marquee where date(:currentDate) between date(startDate) and date(stopDate) and status =0")
     List<Marquee> queryValidMarquee(String currentDate);
 

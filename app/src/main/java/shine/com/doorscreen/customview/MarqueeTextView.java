@@ -13,7 +13,6 @@ import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.OverScroller;
 
-import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.mqtt.bean.Marquee;
@@ -63,50 +62,48 @@ public class MarqueeTextView extends AppCompatTextView {
         float textSize = getTextSize();
         mTextPaint.setTextSize(textSize);
         mScreenWidth = Common.getScreenWidth(context);
-        Log.d(TAG, "mScreenWidth:" + mScreenWidth);
     }
 
 
     //开启跑马灯
-    public void startMarquee(List<Marquee> marquees) {
-        if (marquees != null && marquees.size() > 0) {
-            stopScroll();
-            mIndex=0;
-            mMarquees.clear();
-            mMarquees.addAll(marquees);
-            startScroll();
-        }
+    public void startMarquee() {
+        stopScroll();
+        mIndex=0;
+        startScroll();
     }
 
     public void stopMarquee() {
         Log.d(TAG, "stopMarquee() called");
         stopScroll();
         setText("");
+        mMarquees.clear();
     }
 
     public void add(Marquee marquee) {
         mMarquees.addIfAbsent(marquee);
+        startMarquee();
     }
 
     public void delete(Marquee marquee) {
         mMarquees.remove(marquee);
         if (mMarquees.size() > 0) {
-            stopScroll();
-            mIndex=0;
-            startScroll();
+            startMarquee();
         }else{
             stopMarquee();
         }
     }
 
     private void startScroll() {
+        if (mMarquees.size()==0) {
+            return;
+        }
         isStop=false;
         mIndex = ++mIndex % mMarquees.size();
         String content = mMarquees.get(mIndex).getMessage();
         setText(content);
         //考虑左右边距，否则显示不全
         int measureText = (int) mTextPaint.measureText(content)+getPaddingLeft()+getPaddingRight();
-        Log.d(TAG, "content of marquee "+content+"length "+measureText);
+//        Log.d(TAG, "content of marquee "+content+"length "+measureText);
         //设置布局参数，否则文字超过父控件文字不能显示
         FrameLayout.LayoutParams layoutParams=null;
         if (measureText > mScreenWidth) {
@@ -136,6 +133,7 @@ public class MarqueeTextView extends AppCompatTextView {
             scrollTo(mOverScroller.getCurrX(), 0);
             invalidate();
         }else{
+            //一个播放结果开始下一个
             isStop=true;
             startScroll();
         }

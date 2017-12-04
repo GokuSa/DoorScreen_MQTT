@@ -1,7 +1,5 @@
 package shine.com.doorscreen.mqtt.bean;
 
-import java.util.List;
-
 /**
  * author:
  * 时间:2017/7/31
@@ -23,7 +21,7 @@ public class MarqueeInfo {
     private String action;
     private int type;
     private int marqueeid;
-    private DataBean data;
+    private Marquee data;
     private String sender;
 
     public String getAction() {
@@ -50,11 +48,11 @@ public class MarqueeInfo {
         this.marqueeid = marqueeid;
     }
 
-    public DataBean getData() {
+    public Marquee getData() {
         return data;
     }
 
-    public void setData(DataBean data) {
+    public void setData(Marquee data) {
         this.data = data;
     }
 
@@ -66,8 +64,8 @@ public class MarqueeInfo {
         this.sender = sender;
     }
 
-    public static class DataBean {
-        /**
+  /*  public static class DataBean {
+        *//**
          * message : assad
          * startdate : 2017-07-31
          * stopdate : 2017-07-31
@@ -85,7 +83,7 @@ public class MarqueeInfo {
          * allday : 2
          * playtimes : [{"start":"08:00","stop":"18:00"},{"start":"19:00","stop":"20:00"}]
          * tasktype : 1
-         */
+         *//*
 
         private String message;
         private String startdate;
@@ -242,10 +240,10 @@ public class MarqueeInfo {
         }
 
         public static class PlaytimesBean {
-            /**
+            *//**
              * start : 08:00
              * stop : 18:00
-             */
+             *//*
 
             private String start;
             private String stop;
@@ -266,5 +264,5 @@ public class MarqueeInfo {
                 this.stop = stop;
             }
         }
-    }
+    }*/
 }

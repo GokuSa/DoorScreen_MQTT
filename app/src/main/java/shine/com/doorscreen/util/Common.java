@@ -11,7 +11,6 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.shine.timingboot.TimingBootUtils;
-import com.shine.utilitylib.CR16PadUtility;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -175,21 +174,7 @@ public class Common {
         toast.show();
     }
 
-    //开屏
-    public static void openScreen() {
-        CR16PadUtility r16PadUtility = new CR16PadUtility();
-        r16PadUtility.SetBlOn();
-        r16PadUtility.SetLvdsOn();
-        r16PadUtility.SetSpkAmpOn();
-    }
 
-    // 设置关屏
-    public static void closeScreen() {
-        CR16PadUtility r16PadUtility = new CR16PadUtility();
-        r16PadUtility.SetBlOff();
-        r16PadUtility.SetLvdsOff();
-        r16PadUtility.SetSpkAmpOff();
-    }
 
 
     public static void open(Long date) {
@@ -198,6 +183,8 @@ public class Common {
         Log.d(TAG,"开机时间为"+ start);
         int result = new TimingBootUtils().setRtcTime(start);
     }
+
+
 
     /**
      * 取消开机，否则会重启

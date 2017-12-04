@@ -20,7 +20,7 @@ public class MarqueeList {
 
     private String action;
     private String sender;
-    private List<DataBean> data;
+    private List<Marquee> data;
 
     public String getAction() {
         return action;
@@ -38,16 +38,24 @@ public class MarqueeList {
         this.sender = sender;
     }
 
-    public List<DataBean> getData() {
+   /* public List<DataBean> getData() {
         return data;
     }
 
     public void setData(List<DataBean> data) {
         this.data = data;
+    }*/
+
+    public List<Marquee> getData() {
+        return data;
     }
 
-    public static class DataBean {
-        /**
+    public void setData(List<Marquee> data) {
+        this.data = data;
+    }
+
+    /* public static class DataBean {
+        *//**
          * type : 2
          * marqueeid : 55
          * message : 今日新闻今日新闻今日新闻今日新闻
@@ -67,27 +75,28 @@ public class MarqueeList {
          * allday : 1
          * playtimes : [{"start":"08:00","stop":"18:00"},{"start":"19:00","stop":"20:00"},{"start":"21:00","stop":"21:10"},{"start":"22:10","stop":"23:10"}]
          * tasktype : 1
-         */
+         *//*
 
         private int type;
         private int marqueeid;
         private String message;
         private String startdate;
         private String stopdate;
-        private String starttime;
-        private String stoptime;
-        private String direction;
-        private String fontsize;
-        private String fontcolor;
-        private String fontname;
-        private String background;
-        private String left;
-        private String right;
-        private String bottom;
-        private String speed;
-        private String allday;
-        private String tasktype;
-        private List<PlaytimesBean> playtimes;
+//        private String starttime;
+//        private String stoptime;
+//        private String direction;
+//        private String fontsize;
+//        private String fontcolor;
+//        private String fontname;
+//        private String background;
+//        private String left;
+//        private String right;
+//        private String bottom;
+//        private String speed;
+//        private String allday;
+//        private String tasktype;
+//        private List<PlaytimesBean> playtimes;
+        private List<MarqueeTime> playtimes;
 
         public int getType() {
             return type;
@@ -129,110 +138,11 @@ public class MarqueeList {
             this.stopdate = stopdate;
         }
 
-        public String getStarttime() {
-            return starttime;
+        public List<MarqueeTime> getPlaytimes() {
+            return playtimes;
         }
 
-        public void setStarttime(String starttime) {
-            this.starttime = starttime;
-        }
-
-        public String getStoptime() {
-            return stoptime;
-        }
-
-        public void setStoptime(String stoptime) {
-            this.stoptime = stoptime;
-        }
-
-        public String getDirection() {
-            return direction;
-        }
-
-        public void setDirection(String direction) {
-            this.direction = direction;
-        }
-
-        public String getFontsize() {
-            return fontsize;
-        }
-
-        public void setFontsize(String fontsize) {
-            this.fontsize = fontsize;
-        }
-
-        public String getFontcolor() {
-            return fontcolor;
-        }
-
-        public void setFontcolor(String fontcolor) {
-            this.fontcolor = fontcolor;
-        }
-
-        public String getFontname() {
-            return fontname;
-        }
-
-        public void setFontname(String fontname) {
-            this.fontname = fontname;
-        }
-
-        public String getBackground() {
-            return background;
-        }
-
-        public void setBackground(String background) {
-            this.background = background;
-        }
-
-        public String getLeft() {
-            return left;
-        }
-
-        public void setLeft(String left) {
-            this.left = left;
-        }
-
-        public String getRight() {
-            return right;
-        }
-
-        public void setRight(String right) {
-            this.right = right;
-        }
-
-        public String getBottom() {
-            return bottom;
-        }
-
-        public void setBottom(String bottom) {
-            this.bottom = bottom;
-        }
-
-        public String getSpeed() {
-            return speed;
-        }
-
-        public void setSpeed(String speed) {
-            this.speed = speed;
-        }
-
-        public String getAllday() {
-            return allday;
-        }
-
-        public void setAllday(String allday) {
-            this.allday = allday;
-        }
-
-        public String getTasktype() {
-            return tasktype;
-        }
-
-        public void setTasktype(String tasktype) {
-            this.tasktype = tasktype;
-        }
-
+        *//*
         public List<PlaytimesBean> getPlaytimes() {
             return playtimes;
         }
@@ -242,10 +152,10 @@ public class MarqueeList {
         }
 
         public static class PlaytimesBean {
-            /**
+            *//**//**
              * start : 08:00
              * stop : 18:00
-             */
+             *//**//*
 
             private String start;
             private String stop;
@@ -265,6 +175,6 @@ public class MarqueeList {
             public void setStop(String stop) {
                 this.stop = stop;
             }
-        }
-    }
+        }*//*
+    }*/
 }

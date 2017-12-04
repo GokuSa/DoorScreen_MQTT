@@ -1,7 +1,6 @@
 package shine.com.doorscreen.fragment;
 
 
-import android.arch.lifecycle.LifecycleFragment;
 import android.arch.lifecycle.Observer;
 import android.arch.lifecycle.ViewModelProviders;
 import android.databinding.DataBindingUtil;
@@ -9,8 +8,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
-import android.support.v7.widget.GridLayoutManager;
+import android.support.v4.app.Fragment;
 import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.SimpleItemAnimator;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
@@ -21,38 +21,38 @@ import android.view.ViewGroup;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 
 import shine.com.doorscreen.R;
-import shine.com.doorscreen.adapter.DripAdapter;
+import shine.com.doorscreen.adapter.DripAdapter2;
 import shine.com.doorscreen.adapter.InsetDecoration;
 import shine.com.doorscreen.adapter.PatientAdapter2;
 import shine.com.doorscreen.adapter.RecycleViewDivider;
 import shine.com.doorscreen.adapter.StaffAdapter;
 import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.databinding.FragmentDoor2Binding;
-import shine.com.doorscreen.entity.DripInfo;
+import shine.com.doorscreen.mqtt.bean.Infusion;
 import shine.com.doorscreen.mqtt.bean.Marquee;
+import shine.com.doorscreen.mqtt.bean.MarqueeTime;
 import shine.com.doorscreen.mqtt.bean.Patient;
-import shine.com.doorscreen.mqtt.bean.ReStart;
 import shine.com.doorscreen.mqtt.bean.Staff;
 import shine.com.doorscreen.mqtt.bean.Ward;
-import shine.com.doorscreen.service.DoorService;
 import shine.com.doorscreen.util.Common;
 import shine.com.doorscreen.viewmodel.WardViewModel;
-
-import static shine.com.doorscreen.activity.MainActivity.CLOSE;
 
 /**
  * A simple {@link } subclass.
  * 门口屏主页面 显示输液进制和医生信息，呼叫信息
+ * todo 减少此页面的业务逻辑
+ * 1.日期时间的显示逻辑
+ * 2.对话框显示逻辑
+ * 3.开关机 开关屏 重启 相关逻辑
  */
-public class DoorFragment extends LifecycleFragment {
-    private static final String TAG = "DoorFragment2";
+public class DoorFragment extends Fragment {
+    private static final String TAG = DoorFragment.class.getSimpleName();
     public static final int DRIP_UPDATE_INTERVAL = 60 * 1000;
     private static final int DRIP_DOCTOR_SWITCH = 779;
     private static final int DRIP_DOCTOR_SWITCH_INTERVAL = 10 * 1000;
@@ -64,8 +64,6 @@ public class DoorFragment extends LifecycleFragment {
     private static final int MSG_MARQUEE_REMOVE = 8;
     private static final int MSG_SCHEDULE_MARQUEES = 9;
     private static final int MSG_REFRESH_TOMORROW = 10;
-
-
     /**
      * 格式化当前时间，用于标题的时间和输液开始时间格式化
      */
@@ -80,21 +78,14 @@ public class DoorFragment extends LifecycleFragment {
     private SimpleDateFormat mMarqueeDateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
     private DateFormat mDateFormat = DateFormat.getDateInstance(DateFormat.FULL, Locale.CHINA);
 
-    private DripAdapter mDripAdapter;
+    private DripAdapter2 mDripAdapter;
     private PatientAdapter2 mPatientAdapter;
     private boolean isVisible = false;
     private boolean isPrepared = false;
     private FragmentDoor2Binding mBinding;
     private StaffAdapter mStaffAdapter;
 
-
-//    private MarqueeView mMarqueeView;
-    /**
-     * 当前跑马灯信息
-     */
-    List<String> mMarquees = new ArrayList<>();
-
-    private List<ReStart> mReStartParams = new ArrayList<>();
+//    private List<ReStart> mReStartParams = new ArrayList<>();
 
     private WardViewModel mWardViewModel;
     @SuppressWarnings("handlerleak")
@@ -104,22 +95,22 @@ public class DoorFragment extends LifecycleFragment {
             switch (msg.what) {
                 case KEEP_TIME:
                     //更新时间
-                    String time = mSimpleDateFormat.format(System.currentTimeMillis());
-                    mBinding.tvTime.setText(time);
-                    //判断是否重启
-                    scheduleReStart(time);
+//                    String time = mSimpleDateFormat.format(System.currentTimeMillis());
+//                    mBinding.tvTime.setText(time);
+//                    判断是否重启
+//                    scheduleReStart(time);
                     //一分钟更新一次
-                    sendEmptyMessageDelayed(KEEP_TIME, TIME_UPDATE_INTERVAL);
+//                    sendEmptyMessageDelayed(KEEP_TIME, TIME_UPDATE_INTERVAL);
                     break;
                 case DRIP_UPDATE:
                     mDripAdapter.update();
                     sendEmptyMessageDelayed(DRIP_UPDATE, DRIP_UPDATE_INTERVAL);
                     break;
                 case DRIP_DOCTOR_SWITCH:
-                    /*if (mViewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_drip) {
-                        mViewSwitchDripAndDoctor.showNext();
-                        mTvInfo.setText(R.string.drip_info);
-                    }*/
+                    if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_drip) {
+                        mBinding.viewSwitchDripAndDoctor.showNext();
+                        mBinding.tvInfo.setText(R.string.drip_info);
+                    }
                     break;
                 case MSG_MARQUEE_ADD:
                     mBinding.marqueeView.add((Marquee) msg.obj);
@@ -131,7 +122,7 @@ public class DoorFragment extends LifecycleFragment {
                     scheduleMarquees();
                     break;
                 case MSG_REFRESH_TOMORROW:
-                    String date_week = mDateFormat.format(System.currentTimeMillis());
+                   /* String date_week = mDateFormat.format(System.currentTimeMillis());
                     //更新日期
                     mBinding.tvDate.setText(date_week.substring(0, date_week.length() - 3));
                     //更新星期
@@ -139,7 +130,7 @@ public class DoorFragment extends LifecycleFragment {
                     //重新安排今天的跑马灯
                     scheduleMarquees();
                     //安排到明天
-                    sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, 24 * 60 *60* 1000);
+                    sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, 24 * 60 *60* 1000);*/
                     break;
 
             }
@@ -160,15 +151,13 @@ public class DoorFragment extends LifecycleFragment {
 
     public void onInvisible() {
         if (isPrepared) {
-//            mMarqueeView.terminate();
+            mBinding.marqueeView.stopMarquee();
         }
     }
 
     private void onVisible() {
         if (isPrepared) {
-            if (mMarquees.size() > 0) {
-//                mMarqueeView.setContent(mMarquees);
-            }
+            mBinding.marqueeView.startMarquee();
         }
     }
 
@@ -177,23 +166,32 @@ public class DoorFragment extends LifecycleFragment {
                              Bundle savedInstanceState) {
         Log.d(TAG, "onCreateView() called ");
         mBinding = DataBindingUtil.inflate(inflater, R.layout.fragment_door2, container, false);
+
         mStaffAdapter = new StaffAdapter();
-        GridLayoutManager gridLayoutManager = new GridLayoutManager(getContext(), 1, GridLayoutManager.HORIZONTAL, false);
-        mBinding.rvDoctor.addItemDecoration(new InsetDecoration(getContext()));
-        mBinding.rvDoctor.setLayoutManager(gridLayoutManager);
-        mBinding.rvDoctor.setAdapter(mStaffAdapter);
+        mBinding.rvStaff.addItemDecoration(new InsetDecoration(getContext()));
+        mBinding.rvStaff.setAdapter(mStaffAdapter);
+
+        mDripAdapter = new DripAdapter2(getActivity(),mOnDripListener);
+        mBinding.rvDrip.addItemDecoration(new InsetDecoration(getContext()));
+        mBinding.rvDrip.setAdapter(mDripAdapter);
+        //数据更新时recyclerView 有默认动画，导致闪屏,所以取消掉
+        ((SimpleItemAnimator) mBinding.rvDrip.getItemAnimator()).setSupportsChangeAnimations(false);
 
         mPatientAdapter = new PatientAdapter2();
         mBinding.rvPatientInfo.setAdapter(mPatientAdapter);
         mBinding.rvPatientInfo.addItemDecoration(new RecycleViewDivider(getActivity(), LinearLayoutManager.VERTICAL, R.drawable.divider_vertical));
 
+        mBinding.tvTitle.setOnClickListener(v -> {
+            int min = new Random().nextInt(5);
+            Infusion infusion = new Infusion("aa:bb:cc:dd:ee:ff",min+"床",  min,min);
+            addInfusion(infusion);
+        });
         return mBinding.getRoot();
     }
 
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated() called with");
-//        mMarqueeView = (MarqueeView) view.findViewById(R.id.marqueeView);
         isPrepared = true;
     }
 
@@ -234,7 +232,7 @@ public class DoorFragment extends LifecycleFragment {
             @Override
             public void onChanged(@Nullable List<Staff> staffs) {
                 Log.d(TAG, staffs.toString());
-                if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_doctor) {
+                if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_staff) {
                     mBinding.viewSwitchDripAndDoctor.showNext();
                     mBinding.tvInfo.setText(R.string.doctor_info);
                     //如果输液有信息，过段时间切换到输液信息
@@ -247,8 +245,8 @@ public class DoorFragment extends LifecycleFragment {
             }
         });
         //从本地获取重启参数
-        mReStartParams.clear();
-        mReStartParams.addAll(mWardViewModel.getReStartParams());
+//        mReStartParams.clear();
+//        mReStartParams.addAll(mWardViewModel.getReStartParams());
 
         //显示当前时间，
         showCurrentDateTime();
@@ -290,6 +288,7 @@ public class DoorFragment extends LifecycleFragment {
         super.onDestroyView();
         Log.d(TAG, "onDestroyView: ");
         mBinding.marqueeView.stopMarquee();
+        mBinding.dateTime.stopWork();
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -326,7 +325,8 @@ public class DoorFragment extends LifecycleFragment {
      *
      * @param time
      */
-    private void scheduleReStart(String time) {
+
+   /* private void scheduleReStart(String time) {
         if (mReStartParams.size() > 0) {
             //获取今天星期几,从0到6
             int day = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1;
@@ -342,16 +342,15 @@ public class DoorFragment extends LifecycleFragment {
                 }
             }
         }
-    }
+    }*/
 
 
     /**
-     * 为了在整点同步会重新发送延迟消息
-     * 初始化标题
-     * 主要是当前日期
-     * 并触发一分钟刷新一次时间
+     * 使用自定义的日期视图处理时间日期的显示
      */
     private void showCurrentDateTime() {
+        mBinding.dateTime.startWork();
+/*
         Log.d(TAG, "showCurrentDateTime() called");
         //格式化当前时间为 年 月 日  星期几，比如2016年8月10日 星期三
         Calendar calendar = Calendar.getInstance();
@@ -374,30 +373,25 @@ public class DoorFragment extends LifecycleFragment {
         calendar.add(Calendar.DAY_OF_MONTH, 1);
         Log.d(TAG, "tomorrow "+mDateFormat.format(calendar.getTimeInMillis()));
         mHandler.removeMessages(MSG_REFRESH_TOMORROW);
-        mHandler.sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, calendar.getTimeInMillis() - current);
+        mHandler.sendEmptyMessageDelayed(MSG_REFRESH_TOMORROW, calendar.getTimeInMillis() - current);*/
     }
 
     //同步本地时间，todo 与时间相关的操作需要从新规划
     public void synLocalTime() {
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                showCurrentDateTime();
-            }
-        });
+        mHandler.post(this::showCurrentDateTime);
     }
 
     //更新重启参数
     public void updateReStart() {
         Log.d(TAG, "updateReStart() called");
-        mHandler.post(new Runnable() {
+        /*mHandler.post(new Runnable() {
             @Override
             public void run() {
                 mReStartParams.clear();
                 mReStartParams.addAll(mWardViewModel.getReStartParams());
                 Log.d(TAG, "mReStartParams " + mReStartParams.toString());
             }
-        });
+        });*/
 
     }
 
@@ -425,56 +419,33 @@ public class DoorFragment extends LifecycleFragment {
     }
 
 
-    /**
-     * 初始化输液信息
-     */
-    private void initializeDripInfo() {
-        mDripAdapter = new DripAdapter(getActivity());
-        GridLayoutManager gridLayoutManager = new GridLayoutManager(getContext(), 1, GridLayoutManager.HORIZONTAL, false);
-       /* mRvDrip.addItemDecoration(new InsetDecoration(getContext()));
-        mRvDrip.setLayoutManager(gridLayoutManager);
-        mRvDrip.setAdapter(mDripAdapter);
-        //数据更新时recyclerView 有默认动画，导致闪屏,所以取消掉
-        ((SimpleItemAnimator) mRvDrip.getItemAnimator()).setSupportsChangeAnimations(false);*/
-
+    public void handleInfusion(Infusion infusion,int type) {
+        switch (type) {
+            case 1:
+                if (infusion.getEvent() == 0) {
+                    addInfusion(infusion);
+                } else if (infusion.getEvent() == 1) {
+                    mDripAdapter.updateInfusion(infusion);
+                }
+                break;
+            case 2:
+                mDripAdapter.removeInfusion(infusion.getClientname());
+                break;
+        }
     }
 
-    /**
-     * 开始输液信息
-     * 必须切换到可见
-     */
-    public void startDrip(DripInfo dripInfo) {
-        if (dripInfo != null) {
-            List<DripInfo.Infusionwarnings> dripInfos = dripInfo.getInfusionwarnings();
-            if (dripInfos != null && dripInfos.size() > 0) {
-                Log.d(TAG, "update dripInfo:" + dripInfos);
-                for (DripInfo.Infusionwarnings drip : dripInfos) {
-                    drip.initilize(mSimpleDateFormat.format(drip.getStart()));
-                    //此时剩余时间就是总时间，涉及输液袋的状态
-                    drip.setTotal(drip.getLeft());
-                }
-                /*if (mViewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_drip) {
-                    mViewSwitchDripAndDoctor.showNext();
-                    mTvInfo.setText(R.string.drip_info);
-                }*/
-                //先移除之前的消息
-                mHandler.removeMessages(DRIP_UPDATE);
-                mDripAdapter.onDateChange(dripInfos);
-                mHandler.sendEmptyMessageDelayed(DRIP_UPDATE, DRIP_UPDATE_INTERVAL);
-            } else {
-                clearDrip();
-                Log.d(TAG, "没有输液信息 显示医生信息");
-                if (mStaffAdapter != null && mStaffAdapter.getItemCount() > 0) {
-                   /* if (mViewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_doctor) {
-                        Log.d(TAG, "change to doctor view");
-                        mViewSwitchDripAndDoctor.showNext();
-                        mTvInfo.setText(R.string.doctor_info);
-                    }*/
-                }
-            }
-        } else {
-            clearDrip();
+    //添加输液信息
+    private void addInfusion(Infusion infusion) {
+        infusion.initilize(mSimpleDateFormat.format(System.currentTimeMillis()));
+//        如果当前不是输液视图 需要切换
+        if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() != R.id.rv_drip) {
+            mBinding.viewSwitchDripAndDoctor.showNext();
+            mBinding.tvInfo.setText(R.string.drip_info);
         }
+        //先移除之前的消息
+        mHandler.removeMessages(DRIP_UPDATE);
+        mDripAdapter.addInfusion(infusion);
+        mHandler.sendEmptyMessageDelayed(DRIP_UPDATE, DRIP_UPDATE_INTERVAL);
     }
 
     //清空输液信息
@@ -484,34 +455,23 @@ public class DoorFragment extends LifecycleFragment {
         }
     }
 
-    /**
-     * 停止输液 移除对应床号的输液提醒
-     *
-     * @param bedno
-     */
-    public void stopDrip(String bedno) {
-        if (!TextUtils.isEmpty(bedno)) {
-            mDripAdapter.onDateRemoved(bedno);
-        }
-    }
 
-    //输液全部结束后移除消息
-    public void terminateDrip() {
+
+  /*  public void terminateDrip() {
         mHandler.removeMessages(DRIP_UPDATE);
-    }
+    }*/
 
     //所有的输液信息被移除
-    public void stopAllDrip() {
+ /*   public void stopAllDrip() {
         terminateDrip();
-        /*if (mViewSwitchDripAndDoctor.getCurrentView().getId() == R.id.rv_drip) {
-            if (mDoctorAdapter != null && mDoctorAdapter.getItemCount() > 0) {
-                mViewSwitchDripAndDoctor.showNext();
-                mTvInfo.setText(R.string.doctor_info);
+        if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() == R.id.rv_drip) {
+            if (mStaffAdapter != null && mStaffAdapter.getItemCount() > 0) {
+                mBinding.viewSwitchDripAndDoctor.showNext();
+                mBinding.tvInfo.setText(R.string.doctor_info);
             }
-        }*/
-    }
+        }
+    }*/
 
-    private List<Marquee> mMarqueeList = new ArrayList<>();
     /*
     *  1. 同步与服务器的跑马灯
     *  2.中途删除 添加了跑马灯
@@ -537,17 +497,16 @@ public class DoorFragment extends LifecycleFragment {
         String current = mMarqueeDateFormat.format(System.currentTimeMillis());
         List<Marquee> marquees =
                 WardDataBase.INSTANCE(getActivity()).marqueeDao().queryValidMarquee(current);
-        mMarqueeList.clear();
+//        先停止跑马灯
+        mBinding.marqueeView.stopMarquee();
+
         //对每个跑马灯安排播放和结束
         for (Marquee marquee : marquees) {
-            Log.d(TAG, "marquee " + marquee.toString());
-            arrangeMarqueeByPlayingTime(marquee);
-        }
-
-        if (mMarqueeList.size() > 0) {
-            mBinding.marqueeView.startMarquee(mMarqueeList);
-        } else {
-            mBinding.marqueeView.stopMarquee();
+            List<MarqueeTime> marqueeTimes = WardDataBase.INSTANCE(getActivity()).marqueeTimeDao().queryMarqueeTime(marquee.getMarqueeid());
+            for (MarqueeTime marqueeTime : marqueeTimes) {
+                Log.d(TAG, "marquee " + marqueeTime.toString());
+                arrangeMarqueeByPlayingTime(marquee,marqueeTime);
+            }
         }
     }
 
@@ -556,34 +515,56 @@ public class DoorFragment extends LifecycleFragment {
      * Marquee 是一个时间段的跑马灯，多个时间段的跑马灯内容相同
      * 判断当前时间是否在播放时间内，如果在 添加到集合中
      * 为其他未来播放时间段安排跑马灯的添加和删除
+     * @param
      */
-    private void arrangeMarqueeByPlayingTime(Marquee marquee) {
-        Date today = new Date();
-        String today_str = mTimeFormat.format(today);
+    private void arrangeMarqueeByPlayingTime(Marquee marquee,MarqueeTime marqueeTime) {
+        String today_str = mTimeFormat.format(System.currentTimeMillis());
+
         try {
             //一定要这样格式化当前时间
             Date todayTime = mTimeFormat.parse(today_str);
-            Date startTime = mTimeFormat.parse(String.format("%s:00", marquee.getStartTime()));
-            Date stopTime = mTimeFormat.parse(String.format("%s:00", marquee.getStopTime()));
+            Date startTime = mTimeFormat.parse(String.format("%s:00", marqueeTime.getStart()));
+            Date stopTime = mTimeFormat.parse(String.format("%s:00", marqueeTime.getStop()));
             //当前时间与跑马灯的起始结束时间有三种可能，在播放时间之前，在播放时间内，过了播放时间不处理
             long marginWithStart = todayTime.getTime() - startTime.getTime();
             long marginWithStop = todayTime.getTime() - stopTime.getTime();
             if (marginWithStart < 0) {
                 //还没到播放时间,安排开始和结束
+                Log.d(TAG, "start in "+ -marginWithStart+"for marquee "+marquee.getMarqueeid());
+                Log.d(TAG, "stop in "+ -marginWithStop+"for marquee "+marquee.getMarqueeid());
                 mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_ADD, marquee), -marginWithStart);
                 mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_REMOVE, marquee), -marginWithStop);
             } else if (marginWithStart >= 0 && marginWithStop <= 0) {
                 //在播放时间内立马添加到播放集合，同时安排结束
-                mMarqueeList.add(marquee);
+                mBinding.marqueeView.add(marquee);
+                Log.d(TAG, "start now stop in "+ -marginWithStop+" for marquee "+marquee.getMarqueeid());
                 mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_MARQUEE_REMOVE, marquee), -marginWithStop);
             } else {
-                Log.d(TAG, "arrangeMarqueeByPlayingTime: out of play time");
+                Log.d(TAG, "out of play time");
             }
         } catch (ParseException e) {
+            Log.e(TAG, "arrangeMarqueeByPlayingTime: fail to parse time");
             e.printStackTrace();
         }
 
     }
 
+    private DripAdapter2.OnDripListener mOnDripListener=new DripAdapter2.OnDripListener() {
+        @Override
+        public void stopAll() {
+            //输液全部结束后移除消息
+            mHandler.removeMessages(DRIP_UPDATE);
+            if (mBinding.viewSwitchDripAndDoctor.getCurrentView().getId() == R.id.rv_drip) {
+                if (mStaffAdapter != null && mStaffAdapter.getItemCount() > 0) {
+                    mBinding.viewSwitchDripAndDoctor.showNext();
+                    mBinding.tvInfo.setText(R.string.doctor_info);
+                }
+            }
+        }
 
+        @Override
+        public void finishAll() {
+            mHandler.removeMessages(DRIP_UPDATE);
+        }
+    };
 }

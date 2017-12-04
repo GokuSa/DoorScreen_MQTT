@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:gravity="center"
+    tools:background="@color/colorPrimary"
+    >
+
+    <TextView
+        android:id="@+id/tv_date"
+        tools:text="2016-5-4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@android:color/white"
+        android:textSize="48px"/>
+
+    <TextView
+        android:id="@+id/tv_weekday"
+        tools:text="week3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tv_date"
+        android:textColor="@android:color/white"
+        android:textSize="36px"/>
+
+    <TextView
+        android:id="@+id/tv_time"
+        tools:text="week3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignEnd="@id/tv_date"
+        android:layout_below="@id/tv_date"
+        android:textColor="@android:color/white"
+        android:textSize="36px"/>
+
+</RelativeLayout>

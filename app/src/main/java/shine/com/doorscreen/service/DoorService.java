@@ -16,23 +16,27 @@ import com.shine.utilitylib.A64Utility;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.database.DoorScreenDataBase;
+import shine.com.doorscreen.database.WardDataBase;
+import shine.com.doorscreen.mqtt.bean.ReStart;
+import shine.com.doorscreen.util.Common;
+import shine.com.doorscreen.util.DateFormatManager;
 import shine.com.doorscreen.util.RootCommand;
 
 import static shine.com.doorscreen.activity.MainActivity.CALL_OFF;
 import static shine.com.doorscreen.activity.MainActivity.CALL_ON;
 import static shine.com.doorscreen.activity.MainActivity.CLOSE;
 import static shine.com.doorscreen.activity.MainActivity.DOWNLOAD_DONE;
-import static shine.com.doorscreen.activity.MainActivity.MARQUEE_STOP;
-import static shine.com.doorscreen.activity.MainActivity.MARQUEE_UPDATE;
 import static shine.com.doorscreen.activity.MainActivity.MEDIA_DELETE;
 import static shine.com.doorscreen.activity.MainActivity.MEDIA_STOP;
 import static shine.com.doorscreen.activity.MainActivity.REBOOT;
 import static shine.com.doorscreen.activity.MainActivity.REMOVE_CLOSE;
-import static shine.com.doorscreen.activity.MainActivity.SCAN_MARQUEE;
+import static shine.com.doorscreen.activity.MainActivity.RESTART;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCREEN_SWITCH;
@@ -46,9 +50,10 @@ import static shine.com.doorscreen.activity.MainActivity.VOLUME_SWITCH;
  * 在后台子线程中处理任务
  * IntentService 没发现延时处理功能
  * 重启需要系统签名，并添加Reboot权限，在manifest根节点添加 android:sharedUserId="android.uid.system"
+ * 处理不需要在UI中处理的逻辑 开关机 开关屏  重启
  */
 public class DoorService extends Service implements Handler.Callback {
-    private static final String TAG = "DoorService";
+    private static final String TAG =DoorService.class.getSimpleName();
     public static final String ACTION = "action";
     public static final String DATA = "data";
 
@@ -58,12 +63,9 @@ public class DoorService extends Service implements Handler.Callback {
      * 当前宣教视频播单id
      */
     private String mMediaIds;
-    /**
-     * 当前跑马灯id
-     */
-    private String mMarqueeIds;
-    private A64Utility mA64Utility;
 
+    private A64Utility mA64Utility;
+    private DateFormatManager mDateFormatManager;
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -96,6 +98,8 @@ public class DoorService extends Service implements Handler.Callback {
         mA64Utility = new A64Utility();
         //多媒体和跑马灯检索时间格式，后台的时间精确到分，我们设置格式到秒，这样检索不会有1分钟误差
         mCurrentDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:02", Locale.CHINA);
+//        格式化日期类
+        mDateFormatManager=new DateFormatManager();
 
         HandlerThread handlerThread = new HandlerThread("door_service");
         handlerThread.start();
@@ -104,15 +108,14 @@ public class DoorService extends Service implements Handler.Callback {
         int current_second = Calendar.getInstance().get(Calendar.SECOND);
         Log.d(TAG, "current_second:" + current_second);
         //整分扫描多媒体和跑马灯
-//        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
-        //立马扫描
-//        scanMarquee();
-        //下一个整点扫描
-        mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, (62 - current_second) * 1000);
+        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
+
         //音量设置
         mHandler.sendEmptyMessageDelayed(VOLUME_SET, 10 * 1000);
         //开关屏设置
         mHandler.sendEmptyMessage(SWITCH_SET);
+        //重启设置
+        mHandler.postDelayed(this::handleRestart, 5 * 1000);
     }
 
     @Override
@@ -138,10 +141,6 @@ public class DoorService extends Service implements Handler.Callback {
             case MEDIA_DELETE:
                 updateScanMedia();
                 break;
-            case MARQUEE_UPDATE:
-            case MARQUEE_STOP:
-                updateScanMarquee();
-                break;
             case CLOSE:
                 Log.d(TAG, "收到最新的关机操作 ");
                 mHandler.postDelayed(mShunDown, 300);
@@ -151,31 +150,72 @@ public class DoorService extends Service implements Handler.Callback {
                 break;
             //处理系统呼叫，如果在关屏状态需要开屏
             case CALL_ON:
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
-                            mA64Utility.OpenScreen();
-                        }
+                mHandler.post(() -> {
+                    if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                        mA64Utility.OpenScreen();
                     }
                 });
 
                 break;
             //呼叫结束，如果之前是关屏状态要恢复
             case CALL_OFF:
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
-                            mA64Utility.CloseScreen();
-                        }
+                mHandler.post(() -> {
+                    if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                        mA64Utility.CloseScreen();
                     }
                 });
                 break;
-
+            case RESTART:
+                handleRestart();
+                break;
         }
 
         return START_NOT_STICKY;
+    }
+
+    /**
+     * 处理重启
+     * 从本地数据库获取数据 安排最近的一次重启
+     */
+    private void handleRestart() {
+        Log.d(TAG, "handleRestart() called");
+        //  先移除再设置关机操作
+        mHandler.removeMessages(CLOSE);
+        List<ReStart> mReStartParams = WardDataBase.INSTANCE(this.getApplication()).reStartDao().getAll();
+        int size=mReStartParams.size();
+        Calendar calendar = Calendar.getInstance();
+        //获取今天星期几,从0到6
+        int day = calendar.get(Calendar.DAY_OF_WEEK) - 1;
+//        遍历一周每一天找到最近的开关机设置
+        for (int i = 0; i < size; i++) {
+//            取模防止明天的数字比今天小 比如今天周六 是 6 明天是0
+            day=(day+i)%size;
+            ReStart reStart = mReStartParams.get(day);
+            //如果重启
+            if (reStart.getReboot() == 1 ) {
+//                设置到重启的那天
+                calendar.add(Calendar.DAY_OF_MONTH, i);
+                String rebootTime = reStart.getRebootTime();
+                Date date = mDateFormatManager.parseTime(rebootTime);
+                if (date != null) {
+                    calendar.set(Calendar.HOUR_OF_DAY,date.getHours());
+                    calendar.set(Calendar.MINUTE,date.getMinutes());
+                    calendar.set(Calendar.SECOND,0);
+                    String dateTime = mDateFormatManager.formatDateTime(calendar);
+                    Log.d(TAG, "dateTime"+dateTime);
+//                    防止刚好是今天并且时间过期，比如刚重启
+                    if (calendar.getTimeInMillis() < System.currentTimeMillis()) {
+                        continue;
+                    }
+                    //设置开机时间
+                    Common.open(calendar.getTimeInMillis() + 60 * 1000);
+                    mHandler.sendEmptyMessageDelayed(CLOSE, calendar.getTimeInMillis()-System.currentTimeMillis());
+                }else{
+                    Log.e(TAG, "handleRestart: 解析时间异常");
+                }
+                break;
+            }
+        }
     }
 
     //多媒体有更新后，先移除先前的message，重置mMediaIds,再开始扫描
@@ -183,13 +223,6 @@ public class DoorService extends Service implements Handler.Callback {
         mHandler.removeMessages(SCAN_MEDIA);
         mMediaIds = "";
         mHandler.sendEmptyMessage(SCAN_MEDIA);
-    }
-
-    //跑马灯有更新后，先移除先前的message，重置mMarqueeIds,再开始扫描
-    private void updateScanMarquee() {
-        mHandler.removeMessages(SCAN_MARQUEE);
-        mMarqueeIds = "";
-        mHandler.sendEmptyMessage(SCAN_MARQUEE);
     }
 
     @Override
@@ -206,10 +239,6 @@ public class DoorService extends Service implements Handler.Callback {
                 scanMedia();
                 mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, SCAN_MEDIA_INTERVAL);
                 break;
-            case SCAN_MARQUEE:
-//                scanMarquee();
-//                mHandler.sendEmptyMessageDelayed(SCAN_MARQUEE, SCAN_MARQUEE_INTERVAL);
-                break;
 
         }
         return true;
@@ -219,6 +248,7 @@ public class DoorService extends Service implements Handler.Callback {
     /**
      * 从数据库检索符合当前时间段的多媒体播单，若有变更发送给主页面处理
      */
+    @Deprecated
     private void scanMedia() {
         String[] current = mCurrentDateFormat.format(System.currentTimeMillis()).split(" ");
         Log.d(TAG, current[0] + "--" + current[1]);
@@ -245,28 +275,6 @@ public class DoorService extends Service implements Handler.Callback {
         }
     }
 
-    /**
-     * 从数据库检索符合当前时间段的跑马灯播单，若有变更发送给主页面处理
-     * 逻辑同上，暂不合并
-     */
-    private void scanMarquee() {
-        String[] current = mCurrentDateFormat.format(System.currentTimeMillis()).split(" ");
-        Log.d(TAG, current[0] + "--" + current[1]);
-        //使用格式化的当前日期和时间查询数据库符合条件的多媒体
-        String ids = DoorScreenDataBase.getInstance(this).queryMarqueeIds(current[0], current[1]);
-        Intent intent;
-        //如果检索的播单为空，说明这个时间点没有跑马灯播放,或者结束设置mMarqueeIds为空
-        if (TextUtils.isEmpty(ids)) {
-            mMarqueeIds = "";
-            intent = MainActivity.newIntent(MainActivity.SCAN_MARQUEE, "");
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-        } else if (!ids.equals(mMarqueeIds)) {
-            //如果播单有所更新，通知界面调整
-            mMarqueeIds = ids;
-            intent = MainActivity.newIntent(MainActivity.SCAN_MARQUEE, ids);
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-        }
-    }
 
     /**
      * 执行开关屏

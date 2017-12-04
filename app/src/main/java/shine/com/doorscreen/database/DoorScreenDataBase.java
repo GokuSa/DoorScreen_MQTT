@@ -16,9 +16,8 @@ import java.util.Locale;
 
 import shine.com.doorscreen.entity.DripInfo;
 import shine.com.doorscreen.entity.Elements;
-import shine.com.doorscreen.entity.PushMission;
-import shine.com.doorscreen.mqtt.bean.MarqueeInfo;
-import shine.com.doorscreen.mqtt.bean.MarqueeList;
+import shine.com.doorscreen.entity.Mission;
+import shine.com.doorscreen.entity.PlayTime;
 import shine.com.doorscreen.util.LogUtil;
 
 import static java.lang.System.currentTimeMillis;
@@ -104,7 +103,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
 
 
 
-    public void insertMarquee(MarqueeInfo.DataBean data,int id) {
+    /*public void insertMarquee(MarqueeInfo.DataBean data,int id) {
         List<MarqueeInfo.DataBean.PlaytimesBean> playTime = data.getPlaytimes();
         if (playTime == null||playTime.size()==0) {
             LogUtil.e(TAG,"invalid play times");
@@ -147,10 +146,11 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         } finally {
             database.endTransaction();
         }
-    }
+    }*/
 
     //更新所有跑马灯，删除本地数据库相关表内容，重新插入
-    public void updateAllMarquee( List<MarqueeList.DataBean> data) {
+
+   /* public void updateAllMarquee( List<MarqueeList.DataBean> data) {
         SQLiteDatabase database = getWritableDatabase();
         database.beginTransaction();
         try {
@@ -193,7 +193,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
                 ContentValues contentValues=new ContentValues();
                 contentValues.put("id",marquee.getMarqueeid());
                 contentValues.put("message",marquee.getMessage());
-                contentValues.put("speed",marquee.getSpeed());
+//                contentValues.put("speed",marquee.getSpeed());
                 contentValues.put("status",status);
                 database.insertOrThrow(TABLE_MARQUEE, null, contentValues);
             }
@@ -203,13 +203,14 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         } finally {
             database.endTransaction();
         }
-    }
+    }*/
 
 
     /**
      * 停止跑马灯，更改时间表status为-1，因为检索时是根据时间表和status获取id再检索跑马灯的
      * @param id 跑马灯id
      */
+    @Deprecated
     public void stopMarquee(int id) {
         LogUtil.d(TAG,"begin to stop marquee");
         SQLiteDatabase writableDatabase = getWritableDatabase();
@@ -294,31 +295,32 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
     /**
      * 插入宣教信息多时间播放段
      */
-    public void insertMediaTime(PushMission pushMission) {
-        List<PushMission.PlayTime> playTime = pushMission.getPlayTime();
-        if (playTime == null||playTime.size()==0) {
-            LogUtil.e(TAG,"invalid play times");
+    public void insertMediaTime(Mission mission) {
+        List<PlayTime> playTime = mission.getPlaytimes();
+
+        if (playTime == null || playTime.size() == 0) {
+            LogUtil.e(TAG, "invalid play times");
             return;
         }
         SQLiteDatabase database = getWritableDatabase();
         database.beginTransaction();
         try {
             //先删除要插入的旧播单信息
-            int delete = database.delete(TABLE_MEDIA_TIME, "id=?", new String[]{String.valueOf(pushMission.getId())});
+            int delete = database.delete(TABLE_MEDIA_TIME, "id=?", new String[]{String.valueOf(mission.getMissionid())});
             LogUtil.d(TAG, "delete old media time id:" + delete);
-            for (PushMission.PlayTime time : playTime) {
+            for (PlayTime time : playTime) {
                 if (time == null) {
-                    LogUtil.e(TAG,"play time is null");
+                    Log.e(TAG, "play time is null");
                     continue;
                 }
                 LogUtil.d(TAG, "insert play media time :" + time.getStart());
-                ContentValues contentValues=new ContentValues();
-                contentValues.put("id", pushMission.getId());
-                contentValues.put("allday", pushMission.getAllday());
-                contentValues.put("tasktype", pushMission.getTasktype());
-                contentValues.put("orderno", pushMission.getOrderno());
-                contentValues.put("startdate", pushMission.getStartdate());
-                contentValues.put("stopdate",pushMission.getStopdate());
+                ContentValues contentValues = new ContentValues();
+                contentValues.put("id", mission.getMissionid());
+                contentValues.put("allday", "");
+                contentValues.put("tasktype", "");
+                contentValues.put("orderno", "");
+                contentValues.put("startdate", mission.getStartdate());
+                contentValues.put("stopdate", mission.getStopdate());
                 contentValues.put("starttime", time.getStart());
                 contentValues.put("stoptime", time.getStop());
                 contentValues.put("status", 0);
@@ -326,7 +328,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
             }
             database.setTransactionSuccessful();
         } catch (Exception e) {
-            LogUtil.e(TAG,"fail to delete or insert media time");
+            LogUtil.e(TAG, "fail to delete or insert media time");
         } finally {
             database.endTransaction();
         }
@@ -619,9 +621,5 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         }
         return dripInfos;
     }
-
-
-
-
 
 }

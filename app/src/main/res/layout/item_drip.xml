@@ -5,7 +5,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="266px"
-    android:layout_height="346px"
+    android:layout_height="320px"
     android:background="@drawable/bg_general"
     android:padding="16px"
     >
@@ -15,10 +15,11 @@
         android:layout_width="190px"
         android:layout_height="56px"
         android:layout_centerHorizontal="true"
-        android:layout_marginBottom="16px"
+        android:layout_marginBottom="12px"
         android:background="@drawable/selector_drip_doctor"
         android:gravity="center"
         tools:text="1101床"
+        android:lines="1"
         android:textColor="@android:color/white"
         android:textSize="32px"
         />
@@ -107,9 +108,9 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentRight="true"
         android:layout_below="@id/tv_time_left"
-        android:layout_marginTop="24px"
+        android:layout_marginTop="20px"
         android:gravity="center"
-        android:lineSpacingMultiplier="1.5"
+        android:lineSpacingMultiplier="1.2"
         tools:text="开始时间\n07:00\n60滴/分钟"
         android:textSize="28px"/>
 </RelativeLayout>

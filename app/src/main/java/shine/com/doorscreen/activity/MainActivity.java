@@ -7,7 +7,6 @@ import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.os.Environment;
-import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v4.content.LocalBroadcastManager;
@@ -21,20 +20,15 @@ import java.util.List;
 
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.adapter.DoorInfoPagerAdapter;
-import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.customview.CustomViewPager;
-import shine.com.doorscreen.database.DoorScreenDataBase;
-import shine.com.doorscreen.entity.Elements;
-import shine.com.doorscreen.entity.PushMission;
 import shine.com.doorscreen.fragment.CallTransferDialog;
 import shine.com.doorscreen.fragment.DoorFragment;
 import shine.com.doorscreen.fragment.MediaFragment;
 import shine.com.doorscreen.fragment.WaitingDialog;
 import shine.com.doorscreen.mqtt.MQTTClient;
+import shine.com.doorscreen.mqtt.bean.Infusion;
 import shine.com.doorscreen.service.DoorService;
-import shine.com.doorscreen.service.DownLoadService;
 import shine.com.doorscreen.util.Common;
-import shine.com.doorscreen.util.IniReaderNoSection;
 
 /**
  * 主页面,承载门口屏和视频宣教页面，
@@ -102,6 +96,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
     public static final int REMOVE_CLOSE = 56;
     public static final int CALL_ON = 57;
     public static final int CALL_OFF = 58;
+    public static final int RESTART = 59;
     //视频和图片目录
     private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
     private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
@@ -126,10 +121,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
      * 宣教信息是否在播，此时有人呼叫换到门口屏，呼叫结束返回播放页面
      */
     private boolean isMediaPlaying = false;
-
-    private boolean isMarqueePlaying = false;
     private boolean isCalling = false;
-
     private MQTTClient mMQTTClient;
 
     //是否成功连接过
@@ -189,7 +181,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
      * VideoFragment 播放宣教视频
      */
     private void initView() {
-        mViewPager = (CustomViewPager) findViewById(R.id.viewpager);
+        mViewPager = findViewById(R.id.viewpager);
         mMediaFragment = new MediaFragment();
         mDoorFragment = new DoorFragment();
         List<Fragment> fragmentList = new ArrayList<>();
@@ -214,18 +206,16 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
         }
     }
 
-
-
-
     /**
      * 更新本地宣教信息
      * 根据宣教播放时间段不同存储不同字段
      * 存储的时间是决定播放的关键
      */
-    public void updateLocalMedia(@NonNull PushMission pushMission) {
+
+    /*public void updateLocalMedia(@NonNull PushMission pushMission) {
 
         //插入播发时间段
-        DoorScreenDataBase.getInstance(this).insertMediaTime(pushMission);
+//        DoorScreenDataBase.getInstance(this).insertMediaTime(pushMission);
 
         //数据结构为以前多媒体结构，很多无用数据，
         List<PushMission.Templates> elementlist = pushMission.getTemplates();
@@ -272,7 +262,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
             startService(intent);
         }
 
-    }
+    }*/
 
     /**
      * 网络状态监测
@@ -296,14 +286,6 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
             int action = intent.getIntExtra("flag", -1);
 //            Log.d(TAG, "mReceiver " + action);
             switch (action) {
-                //输液完成
-                case DRIP_DONE:
-                    //停止更新输液信息
-                    mDoorFragment.terminateDrip();
-                    break;
-                case STOP_ALL_DRIP:
-                    mDoorFragment.stopAllDrip();
-                    break;
                 //后台每分钟检索一次多媒体信息
                 case SCAN_MEDIA:
                     String param = intent.getStringExtra("param");
@@ -326,18 +308,7 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
                         mMediaFragment.updateMedia(param);
                     }
                     break;
-                case SCAN_MARQUEE:
-                   /* String paramMarquee = intent.getStringExtra("param");
-                    if (TextUtils.isEmpty(paramMarquee)) {
-                        if (isMarqueePlaying) {
-                            isMarqueePlaying = false;
-                            mDoorFragment.stopMarquee();
-                        }
-                    } else {
-                        isMarqueePlaying = true;
-                        mDoorFragment.updateMarquee(paramMarquee);
-                    }*/
-                    break;
+
             }
         }
     };
@@ -419,5 +390,8 @@ public class MainActivity extends AppCompatActivity implements  MQTTClient.MqttL
         mDoorFragment.updateMarquee();
     }
 
-
+    @Override
+    public void handleInfusion(Infusion infusion,int type) {
+        mDoorFragment.handleInfusion(infusion,type);
+    }
 }

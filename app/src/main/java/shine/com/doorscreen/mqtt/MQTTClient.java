@@ -2,9 +2,10 @@ package shine.com.doorscreen.mqtt;
 
 import android.app.AlarmManager;
 import android.content.Context;
+import android.content.Intent;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
@@ -23,6 +24,7 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -31,13 +33,20 @@ import java.util.Locale;
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
+import shine.com.doorscreen.database.DoorScreenDataBase;
 import shine.com.doorscreen.database.WardDataBase;
+import shine.com.doorscreen.entity.Elements;
+import shine.com.doorscreen.entity.Mission;
+import shine.com.doorscreen.entity.MissionInfo;
+import shine.com.doorscreen.entity.Missions;
 import shine.com.doorscreen.mqtt.bean.CallTransfer;
 import shine.com.doorscreen.mqtt.bean.Doctor;
 import shine.com.doorscreen.mqtt.bean.DoorScreenMessage;
+import shine.com.doorscreen.mqtt.bean.Infusion;
 import shine.com.doorscreen.mqtt.bean.Marquee;
 import shine.com.doorscreen.mqtt.bean.MarqueeInfo;
 import shine.com.doorscreen.mqtt.bean.MarqueeList;
+import shine.com.doorscreen.mqtt.bean.MarqueeTime;
 import shine.com.doorscreen.mqtt.bean.Message;
 import shine.com.doorscreen.mqtt.bean.Nurse;
 import shine.com.doorscreen.mqtt.bean.Patient;
@@ -54,6 +63,7 @@ import shine.com.doorscreen.mqtt.bean.Ward;
 import shine.com.doorscreen.mqtt.bean.WatchTime;
 import shine.com.doorscreen.service.DoorLightHelper;
 import shine.com.doorscreen.service.DoorService;
+import shine.com.doorscreen.service.DownLoadService;
 import shine.com.doorscreen.service.ScreenManager;
 import shine.com.doorscreen.service.VolumeManager;
 import shine.com.doorscreen.util.Common;
@@ -61,6 +71,9 @@ import shine.com.doorscreen.util.IniReaderNoSection;
 import shine.com.doorscreen.util.RootCommand;
 
 import static java.lang.Integer.parseInt;
+import static shine.com.doorscreen.activity.MainActivity.MEDIA_DELETE;
+import static shine.com.doorscreen.activity.MainActivity.MEDIA_STOP;
+import static shine.com.doorscreen.activity.MainActivity.RESTART;
 import static shine.com.doorscreen.util.Common.getMacAddress;
 
 
@@ -86,7 +99,9 @@ public class MQTTClient {
     private String mRoomId = "1";
     private static final String USER_NAME = "shine";
     private static final String PASSWORD = "shine";
-
+    //视频和图片目录
+    private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+    private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
 
     private MqttAndroidClient mqttAndroidClient;
     /**
@@ -426,16 +441,17 @@ public class MQTTClient {
                         List<ReStart> datalist = reBoot.getDatalist();
                         if (datalist != null && datalist.size() > 0) {
                             mWardDataBase.reStartDao().insertAll(datalist);
-                            if (mMqttListener != null) {
+                            DoorService.startService(mContext, RESTART, "");
+                            /*if (mMqttListener != null) {
                                 mMqttListener.updateReStart();
-                            }
+                            }*/
                         }
                     }
                     break;
                 //后台重启上线后
                 case "connected":
-                    Log.d(TAG, "connected");
                     if ("server".equals(jsonObject.optString("sender"))) {
+                        Log.d(TAG, "connected");
                         onConnectSucceed();
                     }
                     break;
@@ -460,6 +476,18 @@ public class MQTTClient {
                 case "workersinfo":
                     handleSynStaff(receive);
                     break;
+                case "missionlist":
+                    handleVideoMissions(receive);
+                    break;
+                case "missioninfo":
+                    handleSingleVideoMission(receive);
+                    break;
+                case "submitinfusion":
+                    handleInfusion(receive,1);
+                    break;
+                case "submitinfusionfinish":
+                    handleInfusion(receive,2);
+                    break;
             }
         }
 
@@ -468,6 +496,114 @@ public class MQTTClient {
 
         }
     };
+
+
+    /**
+     *
+     * @param receive
+     * @param type 1-添加  2-完成
+     */
+    private void handleInfusion(String receive,int type) {
+        try {
+            Infusion infusion = mGson.fromJson(receive, Infusion.class);
+            mMqttListener.handleInfusion(infusion,type);
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 处理单个视频宣教信息  0_暂停，1_删除，2_发布宣教内容
+     *
+     * @param receive
+     */
+    private void handleSingleVideoMission(String receive) {
+        try {
+            MissionInfo missionInfo = mGson.fromJson(receive, MissionInfo.class);
+            int missionid = missionInfo.getMissionid();
+            switch (missionInfo.getType()) {
+                case 0:
+                    if (missionid > 0) {
+                        Log.d(TAG, "handleSingleVideoMission: stop media " + missionid);
+                        DoorScreenDataBase.getInstance(mContext).updateMediaStaus(missionid);
+                        //通知后台重新检索
+                        DoorService.startService(mContext, MEDIA_STOP, "");
+                    }
+                    break;
+                case 1:
+                    if (missionid > 0) {
+                        DoorScreenDataBase.getInstance(mContext).deleteMedia(missionid);
+                        //通知后台重新检索
+                        DoorService.startService(mContext, MEDIA_DELETE, "");
+                    }
+                    break;
+                case 2:
+                    Mission mission = missionInfo.getData();
+                    mission.setMissionid(missionid);
+                    updateVideoMission(mission);
+                    break;
+            }
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //更新单个视频播单
+    private void updateVideoMission(Mission mission) {
+        int missionid = mission.getMissionid();
+        DoorScreenDataBase.getInstance(mContext).insertMediaTime(mission);
+        //这个就是最新宣教素材
+        ArrayList<Elements> elements = mission.getSource();
+        if (elements == null || elements.size() < 1) {
+            return;
+        }
+        Log.d(TAG, "elementsToUpdate:" + elements);
+        //本地关于服务器下载的配置文件
+        IniReaderNoSection inir = new IniReaderNoSection(AppEntrance.ETHERNET_PATH);
+        //需要下载文件的路径前缀，包括ftp地址，端口
+        String mHeader = String.format("ftp://%s:%s//", inir.getValue("ftpip"), inir.getValue("ftpport"));
+
+        //设置下载元素内容
+        for (Elements element : elements) {
+            //设置下载的完整路径
+            element.setSrc(String.format("%s%s", mHeader, element.getSrc()));
+            //设置播单id
+            element.setId(missionid);
+            //分别设置图片和视频的下载路径
+            if (element.getType() == 1) {
+                element.setPath(String.format("%s/%s", mFileMovies.getAbsolutePath(), element.getName()));
+            } else if (element.getType() == 2) {
+                element.setPath(String.format("%s/%s", mFilePicture.getAbsolutePath(), element.getName()));
+            }
+        }
+
+        if (elements.size() > 0) {
+            //启动后台服务下载
+            Intent intent = new Intent(mContext, DownLoadService.class);
+            intent.putExtra("elements", elements);
+            intent.putExtra("id", missionid);
+            mContext.startService(intent);
+        }
+    }
+
+    /**
+     * 与服务器同步本地宣教信息 在应用启动的时候，后台会发送
+     * 根据宣教播放时间段不同存储不同字段
+     * 存储的时间是决定播放的关键
+     *
+     * @param receive
+     */
+    private void handleVideoMissions(String receive) {
+        try {
+            Missions missions = mGson.fromJson(receive, Missions.class);
+            List<Mission> missionList = missions.getData();
+            for (Mission mission : missionList) {
+                updateVideoMission(mission);
+            }
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+        }
+    }
 
     /**
      * 处理音量设置
@@ -691,21 +827,9 @@ public class MQTTClient {
                         if (mMqttListener != null) {
                             mMqttListener.onMarqueeUpdate();
                         }
-//                        DoorScreenDataBase.getInstance(mContext).stopMarquee(marqueeInfo.getMarqueeid());
-//                        DoorService.startService(mContext, MARQUEE_STOP, "");
                         break;
-                    //删除
-                   /* case 1:
-                        mWardDataBase.marqueeDao().deleteMarquee(marqueeInfo.getMarqueeid());
-                        if (mMqttListener != null) {
-                            mMqttListener.onMarqueeDelete(marqueeInfo.getMarqueeid());
-                        }
-//                        DoorScreenDataBase.getInstance(mContext).deleteMarquee(marqueeInfo.getMarqueeid());
-                        break;*/
                     //更新跑马灯
                     case 2:
-//                        DoorScreenDataBase.getInstance(mContext).insertMarquee(data, marqueeInfo.getMarqueeid());
-//                        DoorService.startService(mContext, MARQUEE_UPDATE, "");
                         updateSingleMarquee(marqueeInfo);
                         break;
                 }
@@ -718,28 +842,30 @@ public class MQTTClient {
 
     //更新单个跑马灯
     private void updateSingleMarquee(MarqueeInfo marqueeInfo) {
-        List<Marquee> marquees = new ArrayList<>();
-        MarqueeInfo.DataBean data = marqueeInfo.getData();
-        if (data != null) {
-            List<MarqueeInfo.DataBean.PlaytimesBean> playTime = data.getPlaytimes();
+        Marquee marquee = marqueeInfo.getData();
+        if (marquee != null) {
+            marquee.setMarqueeid(marqueeInfo.getMarqueeid());
+            List<MarqueeTime> playTime = marquee.getPlaytimes();
             if (playTime == null || playTime.size() == 0) {
-                Log.e(TAG, "invalid play times");
                 return;
             }
-            for (MarqueeInfo.DataBean.PlaytimesBean time : playTime) {
+            for (MarqueeTime time : playTime) {
                 if (time == null) {
-                    Log.e(TAG, "play time is null");
                     continue;
                 }
-                Marquee marquee = new Marquee(marqueeInfo.getMarqueeid(), data.getMessage(), data.getStartdate(),
-                        data.getStopdate(), time.getStart(), time.getStop(), 0);
-                marquees.add(marquee);
+                time.setMarqueeid(marquee.getMarqueeid());
             }
-        }
-        if (marquees.size() > 0) {
-            //先删除旧的，因为新旧时间段不同导致个数不同，所以不能替换
-            mWardDataBase.marqueeDao().deleteMarquee(marqueeInfo.getMarqueeid());
-            mWardDataBase.marqueeDao().insertAll(marquees);
+            try {
+                mWardDataBase.beginTransaction();
+//                插入最新的信息，相同的会替换
+                mWardDataBase.marqueeDao().insertMarquee(marquee);
+//                删除旧跑马灯的时间表 重新插入
+                mWardDataBase.marqueeTimeDao().deleteMarqueeTime(marquee.getMarqueeid());
+                mWardDataBase.marqueeTimeDao().insertAll(playTime);
+                mWardDataBase.setTransactionSuccessful();
+            } finally {
+                mWardDataBase.endTransaction();
+            }
             if (mMqttListener != null) {
                 mMqttListener.onMarqueeUpdate();
             }
@@ -752,22 +878,32 @@ public class MQTTClient {
         try {
             MarqueeList marqueeList = mGson.fromJson(receive, MarqueeList.class);
             //先清空数据库
+            mWardDataBase.beginTransaction();
             mWardDataBase.marqueeDao().deleteAllMarquees();
             if (marqueeList != null) {
-                //把数据封装成我们需要的样子
-                List<MarqueeList.DataBean> data = marqueeList.getData();
-                List<Marquee> marquees = processMarqueeTransfer(data);
-               /* for (Marquee marquee : marquees) {
-                    Log.d(TAG, "marquee " + marquee.toString());
-                }*/
-                if (mMqttListener != null && marquees.size() > 0) {
-                    mWardDataBase.marqueeDao().insertAll(marquees);
-                    mMqttListener.onMarqueeUpdate();
+                List<Marquee> marquees = marqueeList.getData();
+                //先插入所有跑马灯信息
+                mWardDataBase.marqueeDao().insertAll(marquees);
+                for (Marquee marquee : marquees) {
+                    List<MarqueeTime> playtimes = marquee.getPlaytimes();
+                    for (MarqueeTime playtime : playtimes) {
+                        playtime.setMarqueeid(marquee.getMarqueeid());
+                    }
+//                    为每个跑马灯插入时刻表数据
+                    mWardDataBase.marqueeTimeDao().insertAll(playtimes);
                 }
+                mWardDataBase.setTransactionSuccessful();
             }
+
+            if (mMqttListener != null) {
+                mMqttListener.onMarqueeUpdate();
+            }
+
 
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
+        } finally {
+            mWardDataBase.endTransaction();
         }
 
     }
@@ -779,7 +915,7 @@ public class MQTTClient {
      * @param marqueeList
      * @return
      */
-    public List<Marquee> processMarqueeTransfer(@NonNull List<MarqueeList.DataBean> marqueeList) {
+    /*public List<Marquee> processMarqueeTransfer(@NonNull List<MarqueeList.DataBean> marqueeList) {
         List<Marquee> marquees = new ArrayList<>();
         for (MarqueeList.DataBean marqueeBean : marqueeList) {
             if (marqueeBean == null) {
@@ -804,7 +940,7 @@ public class MQTTClient {
 
         return marquees;
 
-    }
+    }*/
 
     /**
      * 如果从后台删除门口屏
@@ -828,9 +964,11 @@ public class MQTTClient {
             mWardDataBase.ward().deleteAll();
             //UI没监听，需要通知
             mWardDataBase.reStartDao().deleteAll();
-            if (mMqttListener != null) {
+//            此时仅仅取消关机设置
+            DoorService.startService(mContext, RESTART, "");
+           /* if (mMqttListener != null) {
                 mMqttListener.updateReStart();
-            }
+            }*/
             onConnectSucceed();
         }
     }
@@ -1254,6 +1392,8 @@ public class MQTTClient {
         void handleInternetRecovery();
 
         void onMarqueeUpdate();
+
+        void handleInfusion(Infusion infusion,int type);
 
 
     }

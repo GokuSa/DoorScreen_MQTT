@@ -7,6 +7,7 @@ import android.content.Context;
 import android.text.TextUtils;
 
 import shine.com.doorscreen.mqtt.bean.Marquee;
+import shine.com.doorscreen.mqtt.bean.MarqueeTime;
 import shine.com.doorscreen.mqtt.bean.Patient;
 import shine.com.doorscreen.mqtt.bean.ReStart;
 import shine.com.doorscreen.mqtt.bean.Staff;
@@ -19,7 +20,8 @@ import shine.com.doorscreen.mqtt.bean.Ward;
  * qq:1220289215
  * 类描述：数据库地址/data/data/shine.com.doorscreen/databases/Ward
  */
-@Database(entities = {Ward.class, Staff.class, Patient.class, ReStart.class, Marquee.class},version =13,exportSchema = false)
+@Database(entities = {Ward.class, Staff.class, Patient.class, ReStart.class,
+        Marquee.class, MarqueeTime.class},version =2,exportSchema = false)
 public abstract class WardDataBase extends RoomDatabase {
 
     private static WardDataBase sRoomDataBase;
@@ -29,11 +31,14 @@ public abstract class WardDataBase extends RoomDatabase {
     public abstract StaffDao staff();
     public abstract ReStartDao reStartDao();
     public abstract MarqueeDao marqueeDao();
+    public abstract MarqueeTimeDao marqueeTimeDao();
 
     public synchronized static WardDataBase INSTANCE(Context context) {
         if (sRoomDataBase == null) {
             sRoomDataBase= Room.databaseBuilder(context.getApplicationContext(),WardDataBase.class,"Ward")
                     .allowMainThreadQueries()
+//                    Room will re-create all of the tables
+                    .fallbackToDestructiveMigration()
                     .build();
         }
         return sRoomDataBase;

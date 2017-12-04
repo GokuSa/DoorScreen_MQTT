@@ -28,6 +28,7 @@ import shine.com.doorscreen.R;
  *
  * @author Sebastian Roth <sebastian.roth@gmail.com>
  */
+@Deprecated
 public class MarqueeView2 extends LinearLayout {
     private TextView mTextField;
 

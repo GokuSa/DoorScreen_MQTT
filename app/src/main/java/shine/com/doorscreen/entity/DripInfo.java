@@ -8,6 +8,7 @@ import shine.com.doorscreen.app.AppEntrance;
  * Created by Administrator on 2016/9/21.
  * 输液信息
  */
+@Deprecated
 public class DripInfo {
 
     /**
