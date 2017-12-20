@@ -1,16 +1,26 @@
 package shine.com.doorscreen;
 
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 import org.junit.Test;
 
+import java.lang.reflect.Type;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import shine.com.doorscreen.entity.PlayTime;
+
+import static junit.framework.Assert.assertTrue;
 
 /**
  * Example local unit test, which will execute on the development machine (host).
@@ -102,11 +112,12 @@ public class UnitTest {
     @Test
     public void testDate() {
 
-         DateFormat mDateFormat = DateFormat.getDateInstance(DateFormat.LONG, Locale.CHINA);
-         DateFormat mTimeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
-         DateFormat mWeekFormat = new SimpleDateFormat("EEE",Locale.CHINA);
+        DateFormat mDateFormat = DateFormat.getDateInstance(DateFormat.LONG, Locale.CHINA);
+        DateFormat mTimeFormat2 = DateFormat.getTimeInstance(DateFormat.MEDIUM, Locale.CHINA);
+        DateFormat mTimeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
+        DateFormat mWeekFormat = new SimpleDateFormat("EEE", Locale.CHINA);
         System.out.println(mDateFormat.format(System.currentTimeMillis()));
-        System.out.println(mTimeFormat.format(System.currentTimeMillis()));
+        System.out.println(mTimeFormat2.format(System.currentTimeMillis()));
         System.out.println(mWeekFormat.format(System.currentTimeMillis()));
 
         Date parse = null;
@@ -116,13 +127,65 @@ public class UnitTest {
             instance.setTime(parse);
             int i = instance.get(Calendar.HOUR_OF_DAY);
             int j = instance.get(Calendar.MINUTE);
-            System.out.printf("hour=%d min=%d",i,j);
-            System.out.printf("hour=%d min=%d",parse.getHours(),parse.getMinutes());
+            System.out.printf("hour=%d min=%d", i, j);
+            System.out.printf("hour=%d min=%d", parse.getHours(), parse.getMinutes());
         } catch (ParseException e) {
             System.out.println("fail to parse");
             e.printStackTrace();
         }
-
     }
 
+    @Test
+    public void testJson() {
+        Gson gson = new Gson();
+        List<PlayTime> playTimes = new ArrayList<>();
+        PlayTime playTime = new PlayTime();
+        playTime.setStart("12:22");
+        playTime.setStop("122:22");
+        playTimes.add(playTime);
+        playTimes.add(playTime);
+        String output = gson.toJson(playTimes);
+        System.out.println(output);
+        Type typeCollection = new TypeToken<List<PlayTime>>() {
+        }.getType();
+        List<PlayTime> playTimes2 = gson.fromJson(output, typeCollection);
+        System.out.println(playTimes2.toString());
+    }
+
+    @Test
+    public void isTodayValid() throws ParseException {
+        SimpleDateFormat mMediaDateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+        Date startDate = mMediaDateFormat.parse("2017-10-12");
+        Date EndDate = mMediaDateFormat.parse("2017-12-19");
+        String today = mMediaDateFormat.format(System.currentTimeMillis());
+        Date todayDate = mMediaDateFormat.parse(today);
+//        开始日期小于结束日期
+        assertTrue(startDate.compareTo(EndDate) <= 0);
+//        今天的日期大于等于开始日期
+        assertTrue(todayDate.compareTo(startDate) >= 0);
+//        今天的日期小于等于结束日期
+        assertTrue(todayDate.compareTo(EndDate) <= 0);
+
+        SimpleDateFormat mMediaTimeFormat = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
+        String today_str = mMediaTimeFormat.format(System.currentTimeMillis());
+
+        //一定要这样格式化当前时间
+        Date todayTime = mMediaTimeFormat.parse(today_str);
+        Date startTime = mMediaTimeFormat.parse("09:12:13");
+        Date stopTime = mMediaTimeFormat.parse("09:12:14");
+
+        assertTrue(startTime.before(stopTime));
+        //当前时间与播放的起始结束时间有三种可能，在播放时间之前，在播放时间内，过了播放时间不处理
+        long marginWithStart = todayTime.getTime() - startTime.getTime();
+        long marginWithStop = todayTime.getTime() - stopTime.getTime();
+        if (marginWithStart < 0) {
+            //还没到播放时间,安排定时更新 重新检索
+            System.out.println("还没到播放时间,");
+        } else if (marginWithStart >= 0 && marginWithStop <= 0) {
+            //在播放时间内立马添加到播放集合，同时安排更新
+            System.out.println("在播放时间,");
+        } else {
+            System.out.println("过了播放时间,");
+        }
+    }
 }

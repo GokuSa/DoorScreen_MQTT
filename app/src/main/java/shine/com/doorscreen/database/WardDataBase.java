@@ -21,7 +21,7 @@ import shine.com.doorscreen.mqtt.bean.Ward;
  * 类描述：数据库地址/data/data/shine.com.doorscreen/databases/Ward
  */
 @Database(entities = {Ward.class, Staff.class, Patient.class, ReStart.class,
-        Marquee.class, MarqueeTime.class},version =2,exportSchema = false)
+        Marquee.class, MarqueeTime.class/*, MutilMedia.class, MutilMediaTime.class*/},version =2,exportSchema = false)
 public abstract class WardDataBase extends RoomDatabase {
 
     private static WardDataBase sRoomDataBase;
@@ -32,6 +32,8 @@ public abstract class WardDataBase extends RoomDatabase {
     public abstract ReStartDao reStartDao();
     public abstract MarqueeDao marqueeDao();
     public abstract MarqueeTimeDao marqueeTimeDao();
+//    public abstract MutilMediaDao mutilMediaDao();
+//    public abstract MutilMediaTimeDao mutilMediaTimeDao();
 
     public synchronized static WardDataBase INSTANCE(Context context) {
         if (sRoomDataBase == null) {

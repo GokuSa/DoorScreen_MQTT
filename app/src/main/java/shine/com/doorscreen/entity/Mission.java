@@ -23,15 +23,15 @@ public  class Mission {
         private int missionid;
         //操作类型：0_暂停，2_发布宣教内容
         private int type;
-        private int tasktype;
-        private int orderno;
-        private int allday;
+//        private int tasktype;
+//        private int orderno;
+//        private int allday;
         private String startdate;
         private String stopdate;
-        private String starttime;
-        private String stoptime;
+//        private String starttime;
+//        private String stoptime;
         private List<PlayTime> playtimes;
-        private ArrayList<Elements> source;
+        private ArrayList<Element> source;
 
         public int getMissionid() {
             return missionid;
@@ -49,29 +49,29 @@ public  class Mission {
             this.type = type;
         }
 
-        public int getTasktype() {
-            return tasktype;
-        }
-
-        public void setTasktype(int tasktype) {
-            this.tasktype = tasktype;
-        }
-
-        public int getOrderno() {
-            return orderno;
-        }
-
-        public void setOrderno(int orderno) {
-            this.orderno = orderno;
-        }
-
-        public int getAllday() {
-            return allday;
-        }
-
-        public void setAllday(int allday) {
-            this.allday = allday;
-        }
+//        public int getTasktype() {
+//            return tasktype;
+//        }
+//
+//        public void setTasktype(int tasktype) {
+//            this.tasktype = tasktype;
+//        }
+//
+//        public int getOrderno() {
+//            return orderno;
+//        }
+//
+//        public void setOrderno(int orderno) {
+//            this.orderno = orderno;
+//        }
+//
+//        public int getAllday() {
+//            return allday;
+//        }
+//
+//        public void setAllday(int allday) {
+//            this.allday = allday;
+//        }
 
         public String getStartdate() {
             return startdate;
@@ -89,7 +89,7 @@ public  class Mission {
             this.stopdate = stopdate;
         }
 
-        public String getStarttime() {
+       /* public String getStarttime() {
             return starttime;
         }
 
@@ -103,7 +103,7 @@ public  class Mission {
 
         public void setStoptime(String stoptime) {
             this.stoptime = stoptime;
-        }
+        }*/
 
         public List<PlayTime> getPlaytimes() {
             return playtimes;
@@ -113,15 +113,24 @@ public  class Mission {
             this.playtimes = playtimes;
         }
 
-        public ArrayList<Elements> getSource() {
+        public ArrayList<Element> getSource() {
             return source;
         }
 
-        public void setSource(ArrayList<Elements> source) {
+        public void setSource(ArrayList<Element> source) {
             this.source = source;
         }
 
 
-
-
+    @Override
+    public String toString() {
+        return "Mission{" +
+                "missionid=" + missionid +
+                ", type=" + type +
+                ", startdate='" + startdate + '\'' +
+                ", stopdate='" + stopdate + '\'' +
+                ", playtimes=" + playtimes +
+                ", source=" + source +
+                '}';
     }
+}

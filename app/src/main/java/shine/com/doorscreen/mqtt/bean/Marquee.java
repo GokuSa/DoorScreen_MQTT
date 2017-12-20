@@ -25,8 +25,6 @@ public class Marquee {
     private String message;
     private String startdate;
     private String stopdate;
-//    private String startTime;
-//    private String stopTime;
     private int status=0;
     @Ignore
     private List<MarqueeTime> playtimes;

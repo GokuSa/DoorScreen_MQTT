@@ -24,6 +24,7 @@
                 android:ellipsize="end"
                 android:gravity="center"
                 android:includeFontPadding="false"
+                android:focusable="true"
                 android:textColor="@android:color/white"
                 android:textSize="88px"
                 android:textStyle="bold"

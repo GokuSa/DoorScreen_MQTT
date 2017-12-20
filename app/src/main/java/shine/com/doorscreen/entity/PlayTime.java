@@ -24,4 +24,12 @@ public class PlayTime {
     public void setStop(String stop) {
         this.stop = stop;
     }
+
+    @Override
+    public String toString() {
+        return "PlayTime{" +
+                "start='" + start + '\'' +
+                ", stop='" + stop + '\'' +
+                '}';
+    }
 }

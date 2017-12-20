@@ -2,6 +2,7 @@ package shine.com.doorscreen.mqtt;
 
 import android.app.AlarmManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -33,11 +34,10 @@ import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.database.WardDataBase;
+import shine.com.doorscreen.entity.Element;
 import shine.com.doorscreen.entity.Mission;
 import shine.com.doorscreen.entity.MissionInfo;
 import shine.com.doorscreen.entity.Missions;
-import shine.com.doorscreen.fragment.DoorFragment;
-import shine.com.doorscreen.fragment.MediaFragment;
 import shine.com.doorscreen.mqtt.bean.CallTransfer;
 import shine.com.doorscreen.mqtt.bean.Doctor;
 import shine.com.doorscreen.mqtt.bean.DoorScreenMessage;
@@ -62,6 +62,7 @@ import shine.com.doorscreen.mqtt.bean.Ward;
 import shine.com.doorscreen.mqtt.bean.WatchTime;
 import shine.com.doorscreen.service.DoorLightHelper;
 import shine.com.doorscreen.service.DoorService;
+import shine.com.doorscreen.service.DownLoadService;
 import shine.com.doorscreen.service.ScreenManager;
 import shine.com.doorscreen.service.VolumeManager;
 import shine.com.doorscreen.util.Common;
@@ -69,6 +70,8 @@ import shine.com.doorscreen.util.IniReaderNoSection;
 import shine.com.doorscreen.util.RootCommand;
 
 import static java.lang.Integer.parseInt;
+import static shine.com.doorscreen.activity.MainActivity.MEDIA_DELETE;
+import static shine.com.doorscreen.activity.MainActivity.MEDIA_STOP;
 import static shine.com.doorscreen.activity.MainActivity.RESTART;
 import static shine.com.doorscreen.util.Common.getMacAddress;
 
@@ -79,18 +82,18 @@ import static shine.com.doorscreen.util.Common.getMacAddress;
  * qq:1220289215
  * 类描述：mqtt通讯客户端
  * 1.需要设置用户名和密码
- * <p>通信是全局的，设置成单例模式
  * <p>
  * <p>
+ * 网络通信处理有待优化
  * 统一信息处理方式，在HandlerThread 的子线程处理
  */
 
-public class MQTTClient {
+public class MQTTClient_bak {
     private static final String TAG = "MQTTClient";
     public static final String ETHERNET_PATH = "/extdata/work/show/system/network.ini";
 
     private String subscriptionTopic = "";
-    private Gson mGson;
+    private Gson mGson = new Gson();
     private String mDepartmentId = "1";
     private String mRoomId = "1";
     private static final String USER_NAME = "shine";
@@ -119,97 +122,63 @@ public class MQTTClient {
     /**
      * 订阅的主题,用来取消订阅
      */
-    private HashSet<String> mTopicSubscribed;
+    private HashSet<String> mTopicSubscribed = new HashSet<>();
     private Ward mWard = new Ward();
     private WardDataBase mWardDataBase;
     private Handler mHandler;
 
-    //    private Context mContext;
+    private Context mContext;
     //门灯管理
-    private DoorLightHelper mDoorLightHelper;
+    private DoorLightHelper mDoorLightHelper = new DoorLightHelper();
+    private boolean onceSucceed = false;
 
-    private MainActivity.MqttListener mMqttListener;
-    private DoorFragment.OnFragmentInteractionListener mDoorListener;
-    private MediaFragment.OnMutilMediaListener mMeidaListener;
-
+    private boolean exiting = false;
+    private MqttListener mMqttListener;
     private CallTransfer mCallTransfer;
-    private HandlerThread mHandlerThread;
-    private volatile static MQTTClient sMQTTClient;
 
-    private MQTTClient() {
-        mHandlerThread = new HandlerThread("worker");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
-        //数据存储
-        mWardDataBase = WardDataBase.INSTANCE(AppEntrance.getAppEntrance());
-        mDoorLightHelper = new DoorLightHelper();
-        mTopicSubscribed = new HashSet<>();
-        mGson = new Gson();
-//        从本地获取服务器的IP和端口
-        IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
-        String serverIp = inir.getValue("commuip");
-        String port = inir.getValue("commuport");
-//        MQTT需要的格式化地址 "tcp://172.168.1.9:1883";
-        final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
-
-//        没有网线连接的时候 Common.getIpAddress()获取的IP无效
-        mHost = inir.getValue("ip");
-//        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
-        mClientId = getMacAddress();
-
-        mqttAndroidClient = new MqttAndroidClient(AppEntrance.getAppEntrance(), serverUri, mClientId);
-        mqttAndroidClient.setCallback(mCallbackExtended);
+    public MQTTClient_bak() {
     }
 
-    public static MQTTClient INSTANCE() {
-        if (sMQTTClient == null) {
-            synchronized (MQTTClient.class) {
-                if (sMQTTClient == null) {
-                    sMQTTClient = new MQTTClient();
-                }
-            }
-        }
-        return sMQTTClient;
-    }
-
-
-    @Deprecated
-    private MQTTClient(Context context) {
-//        mMqttListener = mqttListener;
-//        mContext = context.getApplicationContext();
-        //数据存储
-        mWardDataBase = WardDataBase.INSTANCE(context);
-
-        mHandlerThread = new HandlerThread("worker");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
-
-//        从本地获取服务器的IP和端口
-        IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
-        String serverIp = inir.getValue("commuip");
-        String port = inir.getValue("commuport");
-//        MQTT需要的格式化地址 "tcp://172.168.1.9:1883";
-        final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
-
-//        没有网线连接的时候 Common.getIpAddress()获取的IP无效
-        mHost = inir.getValue("ip");
-//        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
-        mClientId = getMacAddress();
-
-        mqttAndroidClient = new MqttAndroidClient(context.getApplicationContext(), serverUri, mClientId);
-        mqttAndroidClient.setCallback(mCallbackExtended);
+    public MQTTClient_bak(MqttListener mqttListener) {
+        mMqttListener = mqttListener;
     }
 
 
     /**
      * 与服务端连接，建立通信
      */
-    public void startConnect() {
-        Log.d(TAG, "startConnect()");
-        if (!mqttAndroidClient.isConnected()) {
-            mHandler.post(mConnectRunnable);
-        } else {
-            Log.e(TAG, "startConnect: already connected");
+    public void startConnect(Context context) {
+        if (context == null) {
+            throw new NullPointerException("context can not be null");
+        }
+        Log.d(TAG, "startConnect() called with: context = [" + context + "]");
+        mContext = context;
+        dismissDialog();
+        //数据存储
+        mWardDataBase = WardDataBase.INSTANCE(context);
+
+        HandlerThread handlerThread = new HandlerThread("worker");
+        handlerThread.start();
+        mHandler = new Handler(handlerThread.getLooper());
+
+//        从本地获取服务器的IP和端口
+        IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
+        String serverIp = inir.getValue("commuip");
+        String port = inir.getValue("commuport");
+//        没有网线连接的时候 此方法获取的IP无效
+        mHost = inir.getValue("ip");
+//        MQTT需要的格式化地址
+        final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
+//        final String serverUri = "tcp://172.168.1.9:1883";
+//        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
+        mClientId = getMacAddress();
+
+        mqttAndroidClient = new MqttAndroidClient(context.getApplicationContext(), serverUri, mClientId);
+        mqttAndroidClient.setCallback(mCallbackExtended);
+        try {
+            mqttAndroidClient.connect(getMqttConnectOptions(), null, mConnectListener);
+        } catch (MqttException ex) {
+            ex.printStackTrace();
         }
     }
 
@@ -252,7 +221,7 @@ public class MQTTClient {
      */
     private MqttConnectOptions getMqttConnectOptions() {
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
-        mqttConnectOptions.setAutomaticReconnect(false);
+        mqttConnectOptions.setAutomaticReconnect(true);
         mqttConnectOptions.setConnectionTimeout(30);
         mqttConnectOptions.setKeepAliveInterval(60);
         mqttConnectOptions.setCleanSession(true);
@@ -283,6 +252,7 @@ public class MQTTClient {
         @Override
         public void onSuccess(IMqttToken asyncActionToken) {
             Log.d(TAG, "onSuccess() called with " + mqttAndroidClient.isConnected());
+            onceSucceed = true;
             dismissDialog();
             onConnectSucceed();
         }
@@ -295,16 +265,21 @@ public class MQTTClient {
                 return;
             }
             showDialog();
-            mHandler.removeCallbacks(mConnectRunnable);
-            mHandler.postDelayed(mConnectRunnable, 8000);
+
+            //在没连接MQTT服务器成功的情况下没有自动重连，需要自己重连服务器，
+            // 如果成功了，也不要自己重新，MQTT会报错
+            if (!onceSucceed) {
+                mHandler.removeCallbacks(mRunnable);
+                mHandler.postDelayed(mRunnable, 5000);
+            }
         }
     };
 
-    private Runnable mConnectRunnable = new Runnable() {
+    private Runnable mRunnable = new Runnable() {
         @Override
         public void run() {
             try {
-                Log.d(TAG, "try to connect");
+                Log.d(TAG, "runnable connect");
                 mqttAndroidClient.connect(getMqttConnectOptions(), null, mConnectListener);
             } catch (MqttException ex) {
                 ex.printStackTrace();
@@ -312,9 +287,6 @@ public class MQTTClient {
         }
     };
 
-    /**
-     * MQTT的回调
-     */
     private MqttCallbackExtended mCallbackExtended = new MqttCallbackExtended() {
         @Override
         public void connectComplete(boolean reconnect, String serverURI) {
@@ -330,8 +302,10 @@ public class MQTTClient {
         @Override
         public void connectionLost(Throwable cause) {
             Log.d(TAG, "The Connection was lost. " + mqttAndroidClient.isConnected());
-            showDialog();
-            startConnect();
+            //ondestory时调用退出exit发送断开命令，会回调此方法，此时context可能为空，加一个判断
+            if (!exiting) {
+                showDialog();
+            }
         }
 
         @Override
@@ -456,7 +430,7 @@ public class MQTTClient {
                 case "reboot":
                     //如果设备类型是门口屏
                     if (13 == jsonObject.optInt("clienttype")) {
-                        DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.REBOOT, receive);
+                        DoorService.startService(mContext, MainActivity.REBOOT, receive);
                     }
                     break;
                 //定时重启
@@ -466,7 +440,7 @@ public class MQTTClient {
                         List<ReStart> datalist = reBoot.getDatalist();
                         if (datalist != null && datalist.size() > 0) {
                             mWardDataBase.reStartDao().insertAll(datalist);
-                            DoorService.startService(AppEntrance.getAppEntrance(), RESTART, "");
+                            DoorService.startService(mContext, RESTART, "");
                             /*if (mMqttListener != null) {
                                 mMqttListener.updateReStart();
                             }*/
@@ -502,7 +476,7 @@ public class MQTTClient {
                     handleSynStaff(receive);
                     break;
                 case "missionlist":
-                    synVideoMissions(receive);
+                    handleVideoMissions(receive);
                     break;
                 case "missioninfo":
                     handleSingleVideoMission(receive);
@@ -530,10 +504,7 @@ public class MQTTClient {
     private void handleInfusion(String receive, int type) {
         try {
             Infusion infusion = mGson.fromJson(receive, Infusion.class);
-            if (mDoorListener != null) {
-                mDoorListener.updateInfusion(infusion, type);
-            }
-//            mMqttListener.handleInfusion(infusion, type);
+            mMqttListener.handleInfusion(infusion, type);
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
         }
@@ -541,36 +512,77 @@ public class MQTTClient {
 
     /**
      * 处理单个视频宣教信息  0_暂停，1_删除，2_发布宣教内容
-     * 类型是发布需要先下载，完成后再通知Frament更新数据 重新检索
-     * 暂停通知Fragment更新数据 重新检索
-     * 停止 删除文件后通知Fragment更新数据 重新检索
-     * 因为可能多个播单共享一个视频 ，删除后其他播单不能使用 所以相关Fragment添加播放列表时需要判断本地文件是否存在
-     * Mission 是用来统一单个播单和多个播单的封装类
-     * @param receive 后台发来的播单数据
+     *
+     * @param receive
      */
     private void handleSingleVideoMission(String receive) {
         try {
             MissionInfo missionInfo = mGson.fromJson(receive, MissionInfo.class);
             int missionid = missionInfo.getMissionid();
-            int type=missionInfo.getType();
             switch (missionInfo.getType()) {
                 case 0:
+                    if (missionid > 0) {
+                        Log.d(TAG, "handleSingleVideoMission: stop media " + missionid);
+//                        DoorScreenDataBase.getInstance(mContext).updateMediaStaus(missionid);
+                        //通知后台重新检索
+                        DoorService.startService(mContext, MEDIA_STOP, "");
+//                      mMqttListener.updateReStart(0);
+                    }
+                    break;
                 case 1:
-                    if (mMeidaListener != null) {
-                        mMeidaListener.invalidateMission(type,missionid);
+                    if (missionid > 0) {
+//                        DoorScreenDataBase.getInstance(mContext).deleteMedia(missionid);
+                        //通知后台重新检索
+                        DoorService.startService(mContext, MEDIA_DELETE, "");
                     }
                     break;
                 case 2:
+//                    mMqttListener.updateReStart(2);
                     Mission mission = missionInfo.getData();
                     mission.setMissionid(missionid);
-                    mission.setType(type);
-                    if (mMeidaListener != null) {
-                        mMeidaListener.handleNewMission(mission);
-                    }
+                    updateVideoMission(mission);
                     break;
             }
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
+        }
+    }
+
+    //更新单个视频播单
+    private void updateVideoMission(Mission mission) {
+        int missionid = mission.getMissionid();
+//        DoorScreenDataBase.getInstance(mContext).insertMediaTime(mission);
+        //这个就是最新宣教素材
+        ArrayList<Element> elements = mission.getSource();
+        if (elements == null || elements.size() < 1) {
+            return;
+        }
+        Log.d(TAG, "elementsToUpdate:" + elements);
+        //本地关于服务器下载的配置文件
+        IniReaderNoSection inir = new IniReaderNoSection(AppEntrance.ETHERNET_PATH);
+        //需要下载文件的路径前缀，包括ftp地址，端口
+        String mHeader = String.format("ftp://%s:%s//", inir.getValue("ftpip"), inir.getValue("ftpport"));
+
+        //设置下载元素内容
+        for (Element element : elements) {
+            //设置下载的完整路径
+            element.setSrc(String.format("%s%s", mHeader, element.getSrc()));
+            //设置播单id
+            element.setId(missionid);
+            //分别设置图片和视频的下载路径
+            if (element.getType() == 1) {
+                element.setPath(String.format("%s/%s", mFileMovies.getAbsolutePath(), element.getName()));
+            } else if (element.getType() == 2) {
+                element.setPath(String.format("%s/%s", mFilePicture.getAbsolutePath(), element.getName()));
+            }
+        }
+
+        if (elements.size() > 0) {
+            //启动后台服务下载
+            Intent intent = new Intent(mContext, DownLoadService.class);
+            intent.putExtra("elements", elements);
+            intent.putExtra("id", missionid);
+            mContext.startService(intent);
         }
     }
 
@@ -581,12 +593,12 @@ public class MQTTClient {
      *
      * @param receive
      */
-    private void synVideoMissions(String receive) {
+    private void handleVideoMissions(String receive) {
         try {
             Missions missions = mGson.fromJson(receive, Missions.class);
             List<Mission> missionList = missions.getData();
-            if (mMeidaListener != null) {
-                mMeidaListener.SynMissions(missionList);
+            for (Mission mission : missionList) {
+                updateVideoMission(mission);
             }
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
@@ -630,7 +642,7 @@ public class MQTTClient {
                     }
                     VolumeManager.getInstance().saveVolumeParam(mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
                             mVolumeNightHour, mVolumeNightMinute);
-                    DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.VOLUME_SWITCH, "");
+                    DoorService.startService(mContext, MainActivity.VOLUME_SWITCH, "");
 
                 }
             }
@@ -643,9 +655,9 @@ public class MQTTClient {
     //通知后台呼叫状态，方便调整开关屏
     private void notifyCallOnOff(boolean callOn) {
         if (callOn) {
-            DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.CALL_ON, "");
+            DoorService.startService(mContext, MainActivity.CALL_ON, "");
         } else {
-            DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.CALL_OFF, "");
+            DoorService.startService(mContext, MainActivity.CALL_OFF, "");
         }
     }
 
@@ -682,7 +694,7 @@ public class MQTTClient {
                             .saveScreenOnOffParams(openScreenHour, openScreenMinute, closeScreenHour, closeScreenMinute, lightParam.getValue());
 //                    String json = mGson.toJson(lightParam);
                     //通知后台更新
-                    DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.SCREEN_SWITCH, "");
+                    DoorService.startService(mContext, MainActivity.SCREEN_SWITCH, "");
                 }
             }
         } catch (JsonSyntaxException | NumberFormatException e) {
@@ -812,8 +824,8 @@ public class MQTTClient {
                     case 0:
                     case 1:
                         mWardDataBase.marqueeDao().stopMarquee(marqueeInfo.getMarqueeid());
-                        if (mDoorListener != null) {
-                            mDoorListener.onMarqueeUpdate();
+                        if (mMqttListener != null) {
+                            mMqttListener.onMarqueeUpdate();
                         }
                         break;
                     //更新跑马灯
@@ -854,8 +866,8 @@ public class MQTTClient {
             } finally {
                 mWardDataBase.endTransaction();
             }
-            if (mDoorListener != null) {
-                mDoorListener.onMarqueeUpdate();
+            if (mMqttListener != null) {
+                mMqttListener.onMarqueeUpdate();
             }
         }
     }
@@ -867,7 +879,6 @@ public class MQTTClient {
             MarqueeList marqueeList = mGson.fromJson(receive, MarqueeList.class);
             //先清空数据库
             mWardDataBase.beginTransaction();
-//            会级联删除
             mWardDataBase.marqueeDao().deleteAllMarquees();
             if (marqueeList != null) {
                 List<Marquee> marquees = marqueeList.getData();
@@ -883,12 +894,10 @@ public class MQTTClient {
                 }
                 mWardDataBase.setTransactionSuccessful();
             }
-            if (mDoorListener != null) {
-                mDoorListener.onMarqueeUpdate();
-            }
-           /* if (mMqttListener != null) {
+
+            if (mMqttListener != null) {
                 mMqttListener.onMarqueeUpdate();
-            }*/
+            }
 
 
         } catch (JsonSyntaxException e) {
@@ -899,7 +908,41 @@ public class MQTTClient {
 
     }
 
-       /**
+    /**
+     * 提取数据把跑马灯封装成我们需要的格式
+     * 跑马灯有日期和多个时间段组成，以前分开存储，现在存在一个表上,每个时间段都有跑马灯数据，会重复
+     *
+     * @param marqueeList
+     * @return
+     */
+    /*public List<Marquee> processMarqueeTransfer(@NonNull List<MarqueeList.DataBean> marqueeList) {
+        List<Marquee> marquees = new ArrayList<>();
+        for (MarqueeList.DataBean marqueeBean : marqueeList) {
+            if (marqueeBean == null) {
+                Log.e(TAG, "marquee is null");
+                continue;
+            }
+            List<MarqueeList.DataBean.PlaytimesBean> playtimes = marqueeBean.getPlaytimes();
+            if (playtimes == null) {
+                Log.e(TAG, "play time is null");
+                continue;
+            }
+            //根据类型判断跑马灯状态,如果不是发布状态直接忽略，停止和删除一样无效
+            if (2 != marqueeBean.getType()) {
+                continue;
+            }
+            for (MarqueeList.DataBean.PlaytimesBean time : playtimes) {
+                Marquee marquee = new Marquee(marqueeBean.getMarqueeid(), marqueeBean.getMessage(),
+                        marqueeBean.getStartdate(), marqueeBean.getStopdate(), time.getStart(), time.getStop(), 0);
+                marquees.add(marquee);
+            }
+        }
+
+        return marquees;
+
+    }*/
+
+    /**
      * 如果从后台删除门口屏
      * 清空数据库内容,UI会自动更新
      * 重新请求数据，方便后台重新添加
@@ -922,7 +965,7 @@ public class MQTTClient {
             //UI没监听，需要通知
             mWardDataBase.reStartDao().deleteAll();
 //            此时仅仅取消关机设置
-            DoorService.startService(AppEntrance.getAppEntrance(), RESTART, "");
+            DoorService.startService(mContext, RESTART, "");
            /* if (mMqttListener != null) {
                 mMqttListener.updateReStart();
             }*/
@@ -966,8 +1009,8 @@ public class MQTTClient {
                 ((AlarmManager) AppEntrance.getAppEntrance().getSystemService(Context.ALARM_SERVICE)).setTime(time);
                 boolean result = new RootCommand().checkTime();
                 Log.d(TAG, "syn local time result:" + result);
-                if (mDoorListener != null) {
-                    mDoorListener.onSynSucceed();
+                if (mMqttListener != null) {
+                    mMqttListener.onSynSucceed();
                 }
             }
         }
@@ -1010,12 +1053,12 @@ public class MQTTClient {
             //增援
             case "reinforcement":
                 doorLightType.setPriority(1);
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_orange));
+                doorLightType.setInstruction(mContext.getResources().getString(R.string.long_orange));
                 doorLightType.setTip(clientname + "请求增援");
                 break;
             case "service":
                 doorLightType.setPriority(2);
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_green));
+                doorLightType.setInstruction(mContext.getResources().getString(R.string.long_green));
                 doorLightType.setTip(clientname + "请求服务");
                 break;
             case "call":
@@ -1023,9 +1066,9 @@ public class MQTTClient {
                 doorLightType.setCurrentTime(System.currentTimeMillis());
                 doorLightType.setTip(clientname + "正在呼叫");
                 if ("screen".equals(sender)) {
-                    doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_red));
+                    doorLightType.setInstruction(mContext.getResources().getString(R.string.long_red));
                 } else if ("bathroom".equals(sender)) {
-                    doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_blue));
+                    doorLightType.setInstruction(mContext.getResources().getString(R.string.long_blue));
                 }
                 break;
 //            case "position":
@@ -1033,7 +1076,7 @@ public class MQTTClient {
             case "transfer":
                 doorLightType.setPriority(4);
                 doorLightType.setCurrentTime(System.currentTimeMillis());
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_green));
+                doorLightType.setInstruction(mContext.getResources().getString(R.string.long_green));
                 doorLightType.setTip(clientname + "呼叫转移");
                 break;
             case "cancelposition":
@@ -1162,7 +1205,7 @@ public class MQTTClient {
     private void publishMessage(String publishMessage, String publishTopic) {
         try {
             mqttAndroidClient.publish(publishTopic,
-                    Base64.encode(publishMessage.getBytes(), android.util.Base64.DEFAULT), mQos, mRetained);
+                    Base64.encode(publishMessage.getBytes(), Base64.DEFAULT), mQos, mRetained);
             Log.d(TAG, "publishMessage " + publishMessage + "\npublishTopic " + publishTopic);
            /* if (!mqttAndroidClient.isConnected()) {
                 Log.d(TAG, mqttAndroidClient.getBufferedMessageCount() + " messages in buffer.");
@@ -1300,22 +1343,25 @@ public class MQTTClient {
         }
     }
 
-    private void finishHanderThread() {
-        if (mHandlerThread != null) {
-            mHandlerThread.quitSafely();
-            mHandlerThread = null;
-        }
-        if (mHandler != null) {
-            mHandler.removeCallbacksAndMessages(null);
-            mHandler = null;
-        }
-    }
+    /**
+     * 退出程序时调用
+     */
+    public void exit() {
+        try {
+            exiting = true;
+            if (mMqttListener != null) {
+                mMqttListener = null;
+            }
+            dismissDialog();
+            mDoorLightHelper.exit();
+            if (mHandler != null) {
+                mHandler.getLooper().quit();
+                mHandler.removeCallbacksAndMessages(null);
+                mHandler = null;
+            }
 
-    private void exitMqtt() {
-        //不为空，已连接
-        if (mqttAndroidClient != null) {
-            try {
-                mqttAndroidClient.setCallback(null);
+            //不为空，已连接
+            if (mqttAndroidClient != null) {
                 String publishMessage = getDisconnectNotification(mHost, mClientId);
                 String publishTopic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mClientId);
                 //断开之前发布通知
@@ -1323,66 +1369,33 @@ public class MQTTClient {
                 //取消之前的订阅
                 unSubscribe();
                 mqttAndroidClient.disconnect();
-            } catch (MqttException e) {
-                Log.d(TAG, "exit exception:" + e);
-                e.printStackTrace();
             }
+
+        } catch (MqttException e) {
+            Log.d(TAG, "exit exception:" + e);
+            e.printStackTrace();
         }
     }
 
-    /**
-     * 退出程序时调用
-     */
-    public void exit() {
-        removeAllListener();
-        dismissDialog();
-        mDoorLightHelper.exit();
-        finishHanderThread();
-        exitMqtt();
+    public interface MqttListener {
+        //与后台同步时间
+        void onSynSucceed();
+
+        //重启
+        void updateReStart(int id);
+
+        //处理呼叫转移
+        void handleCallTransfer(String tip, boolean show);
+
+        void handleOutOfInternet();
+
+        void handleInternetRecovery();
+
+        void onMarqueeUpdate();
+
+        void handleInfusion(Infusion infusion, int type);
 
 
-    }
-
-    //    主页相关监听
-    public void setMqttListner(MainActivity.MqttListener mqttListener) {
-        mMqttListener = mqttListener;
-    }
-
-    //    门口屏信息的监听
-    public void setDoorFragmentListener(DoorFragment.OnFragmentInteractionListener interactionListener) {
-        mDoorListener = interactionListener;
-    }
-
-    public void removeDoorFragmentListener() {
-        if (mDoorListener != null) {
-            mDoorListener = null;
-        }
-    }
-    //多媒体页面监听
-    public void setMeidaListener(MediaFragment.OnMutilMediaListener meidaListener) {
-        mMeidaListener = meidaListener;
-    }
-
-    public void removeMeidaListener() {
-        if (mMeidaListener != null) {
-            mMeidaListener=null;
-        }
-    }
-
-    public void removeMqttListener() {
-        if (mMqttListener != null) {
-            mMqttListener = null;
-        }
-    }
-
-
-    private void removeAllListener() {
-        if (mMqttListener != null) {
-            mMqttListener = null;
-        }
-        if (mDoorListener != null) {
-            mDoorListener = null;
-        }
     }
 
 

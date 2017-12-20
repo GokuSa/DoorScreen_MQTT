@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Locale;
 
 import shine.com.doorscreen.entity.DripInfo;
-import shine.com.doorscreen.entity.Elements;
+import shine.com.doorscreen.entity.Element;
 import shine.com.doorscreen.entity.Mission;
 import shine.com.doorscreen.entity.PlayTime;
 import shine.com.doorscreen.util.LogUtil;
@@ -94,7 +94,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         if(oldVersion!=newVersion ){
             db.execSQL("drop table if exists marquee");
             db.execSQL("drop table if exists marquee_time");
-            db.execSQL("drop table if exists media");
+            db.execSQL("drop table if exists MutilMediaTime");
             db.execSQL("drop table if exists media_time");
 
             onCreate(db);
@@ -323,7 +323,8 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
                 contentValues.put("stopdate", mission.getStopdate());
                 contentValues.put("starttime", time.getStart());
                 contentValues.put("stoptime", time.getStop());
-                contentValues.put("status", 0);
+//                type=2 表示状态正常
+                contentValues.put("status", mission.getType()==2?0:-1);
                 database.insertOrThrow(TABLE_MEDIA_TIME, null, contentValues);
             }
             database.setTransactionSuccessful();
@@ -356,7 +357,6 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
      * 再根据播单添加宣教元素
      */
     public String queryMediaIds(String currentDate, String currentTime) {
-        LogUtil.d(TAG,"begin to query media");
         SQLiteDatabase database = getWritableDatabase();
         StringBuilder stringBuilder = new StringBuilder();
         String sql=String.format(Locale.CHINA,"select id from %s where time('%s')" +
@@ -378,7 +378,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
         if (stringBuilder.length() > 0) {
             stringBuilder.deleteCharAt(0);
         }
-        LogUtil.d(TAG,"ids "+stringBuilder.toString());
+        Log.d(TAG,"ids "+stringBuilder.toString());
         return stringBuilder.toString();
     }
 
@@ -386,7 +386,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
      * 批量插入多媒体元素
      * @param elementsList
      */
-    public void bulkInsertMedia(int id,List<Elements> elementsList) {
+    public void bulkInsertMedia(int id,List<Element> elementsList) {
         if (elementsList == null||elementsList.size()==0) {
             LogUtil.d(TAG, "invalid data");
             return;
@@ -400,7 +400,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
                 int   delete = database.delete(TABLE_MEDIA, "id=? ", new String[]{String.valueOf(id)});
                 LogUtil.d(TAG, "delete old media by id:" + delete);
             }
-            for (Elements element : elementsList) {
+            for (Element element : elementsList) {
                 if (element == null) {
                     LogUtil.d(TAG, "invalid element");
                     continue;
@@ -411,7 +411,7 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
                     ContentValues contentValues = new ContentValues();
                     contentValues.put("id", element.getId());
                     contentValues.put("type", element.getType());
-                    contentValues.put("life", element.getLife());
+//                    contentValues.put("life", element.getLife());
                     contentValues.put("name", element.getName());
                     contentValues.put("path", element.getPath());
                     contentValues.put("src", element.getSrc());
@@ -481,14 +481,14 @@ public class DoorScreenDataBase extends SQLiteOpenHelper{
      * @param ids 播单
      * @return 多媒体路径
      */
-    public   List<Elements> queryMedia(String ids) {
+    public   List<Element> queryMedia(String ids) {
         SQLiteDatabase readableDatabase = getReadableDatabase();
-        List<Elements> paths=new ArrayList<>();
+        List<Element> paths=new ArrayList<>();
         String sql=String.format(Locale.CHINA,"select * from %s  where status=0 and id in (%s) ",TABLE_MEDIA,ids);
         Cursor cursor = readableDatabase.rawQuery(sql, null);
         try {
             while (cursor.moveToNext()) {
-                Elements elements=new Elements();
+                Element elements=new Element();
                 String path = cursor.getString(cursor.getColumnIndex("path"));
                 int type = cursor.getInt(cursor.getColumnIndex("type"));
                 elements.setPath(path);

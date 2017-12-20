@@ -24,12 +24,6 @@ public class AppEntrance extends Application {
         sAppEntrance = this;
     }
 
-    /**
-     * 同步后台时间
-     */
-    private void checkTimeWithServer() {
-        new Thread(new UpToShowClientSyncInfoRunnable()).start();
-    }
 
     public static AppEntrance getAppEntrance() {
         return sAppEntrance;

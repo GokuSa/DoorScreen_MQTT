@@ -1,6 +1,5 @@
 package shine.com.doorscreen.service;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.util.Log;
@@ -8,6 +7,8 @@ import android.util.Log;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
+
+import shine.com.doorscreen.app.AppEntrance;
 
 /**
  * author:
@@ -26,7 +27,6 @@ public class ScreenManager {
      * 格式化开关屏时间 发给底层的字符串指令就是这种格式
      */
     private SimpleDateFormat mDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
-    private Context mContext;
     private static ScreenManager sScreenManager;
     /**
      * 当前屏幕状态，默认开启
@@ -35,16 +35,13 @@ public class ScreenManager {
     private long mOperationDelay = 0;
 
 
-    private ScreenManager(Context context) {
-        if (context == null) {
-            throw new NullPointerException("context can not be null");
-        }
-        mContext = context.getApplicationContext();
+    private ScreenManager() {
+
     }
 
-    public synchronized static ScreenManager getInstance(Context context) {
+    public synchronized static ScreenManager getInstance() {
         if (sScreenManager == null) {
-            sScreenManager = new ScreenManager(context);
+            sScreenManager = new ScreenManager();
         }
         return sScreenManager;
     }
@@ -58,7 +55,7 @@ public class ScreenManager {
      * end_hour  end_min 开屏或关屏的结束时间，light_value决定
      */
     public void saveScreenOnOffParams(int start_hour, int start_min, int end_hour, int end_min, int light_value) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(AppEntrance.getAppEntrance());
         preferences.edit().
                 putInt("start_hour", start_hour).
                 putInt("start_min", start_min).
@@ -74,7 +71,7 @@ public class ScreenManager {
      * light_value=0 表示关屏  发来的时间节点为关屏的起始和结束点
      */
     public void scheduleScreenOnOff() {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(AppEntrance.getAppEntrance());
         int startHour = preferences.getInt("start_hour", 0);
         int startMin = preferences.getInt("start_min", 1);
         int endHour = preferences.getInt("end_hour", 23);

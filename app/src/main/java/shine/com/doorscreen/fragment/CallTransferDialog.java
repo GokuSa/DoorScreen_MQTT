@@ -5,7 +5,6 @@ import android.databinding.DataBindingUtil;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentActivity;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -15,8 +14,8 @@ import android.view.ViewGroup;
 import java.util.Locale;
 
 import shine.com.doorscreen.R;
-import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.databinding.ViewCallTransfer2Binding;
+import shine.com.doorscreen.mqtt.MQTTClient;
 
 
 /**
@@ -66,16 +65,16 @@ public class CallTransferDialog extends DialogFragment {
         if (!TextUtils.isEmpty(mTip)) {
             mBinding.tvContent.setText(String.format(Locale.CHINA,"%s  服务",mTip));
         }
-        mBinding.btnRemove.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                FragmentActivity activity = getActivity();
-                if (activity instanceof MainActivity) {
-                    MainActivity mainActivity = (MainActivity) activity;
-                    mainActivity.cancelCallTransfer();
-                    dismiss();
-                }
-            }
+        mBinding.btnRemove.setOnClickListener(v -> {
+            MQTTClient.INSTANCE().handleCancelCallTransfer();
+            dismiss();
+
+           /* FragmentActivity activity = getActivity();
+            if (activity instanceof MainActivity) {
+                MainActivity mainActivity = (MainActivity) activity;
+                mainActivity.cancelCallTransfer();
+                dismiss();
+            }*/
         });
     }
 

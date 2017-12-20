@@ -4,7 +4,6 @@ import android.content.Context;
 import android.databinding.DataBindingUtil;
 import android.graphics.Typeface;
 import android.support.annotation.NonNull;
-import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -21,7 +20,6 @@ import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.R;
-import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.databinding.ItemDripBinding;
 import shine.com.doorscreen.entity.DripInfo;
 
@@ -61,11 +59,11 @@ public class DripAdapter extends RecyclerView.Adapter<DripAdapter.DripHolder> {
                 notifyItemRemoved(i);
             }
         }
-        if (mWarningList.size() == 0) {
+        /*if (mWarningList.size() == 0) {
             LocalBroadcastManager.getInstance(mContext).
                     sendBroadcast(MainActivity.newIntent(MainActivity.STOP_ALL_DRIP, ""));
 
-        }
+        }*/
 
     }
 
@@ -82,9 +80,9 @@ public class DripAdapter extends RecyclerView.Adapter<DripAdapter.DripHolder> {
             }
         }
         //表示输液全部结束
-        if (count == mWarningList.size()) {
+       /* if (count == mWarningList.size()) {
             LocalBroadcastManager.getInstance(mContext).sendBroadcast(MainActivity.newIntent(MainActivity.DRIP_DONE,""));
-        }
+        }*/
     }
 
     @Override

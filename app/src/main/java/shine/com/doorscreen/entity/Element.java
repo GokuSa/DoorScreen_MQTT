@@ -3,27 +3,15 @@ package shine.com.doorscreen.entity;
 import java.io.Serializable;
 /*
 * 要下载的多媒体视频元素*/
-public class Elements implements Serializable {
+public class Element implements Serializable {
     private String name;
     private int type;
     //服務器路徑
     private String src;
     //本地路徑
-    private String path;
-    private int life;
+    private String path="";
+//    private int life;
     private int id;
-
-
-    @Override
-    public String toString() {
-        return "Elements{" +
-                "name='" + name + '\'' +
-                ", type=" + type +
-                ", src='" + src + '\'' +
-                ", life=" + life +
-                ", id=" + id +
-                '}';
-    }
 
     public String getName() {
         return name;
@@ -49,13 +37,13 @@ public class Elements implements Serializable {
         this.src = src;
     }
 
-    public int getLife() {
+    /*public int getLife() {
         return life;
     }
 
     public void setLife(int life) {
         this.life = life;
-    }
+    }*/
 
     public int getId() {
         return id;
@@ -73,5 +61,14 @@ public class Elements implements Serializable {
         this.path = path;
     }
 
-
+    @Override
+    public String toString() {
+        return "Element{" +
+                "name='" + name + '\'' +
+                ", type=" + type +
+                ", src='" + src + '\'' +
+                ", path='" + path + '\'' +
+                ", id=" + id +
+                '}';
+    }
 }

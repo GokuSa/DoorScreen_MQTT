@@ -7,8 +7,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Message;
-import android.support.v4.content.LocalBroadcastManager;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.shine.utilitylib.A64Utility;
@@ -21,7 +19,6 @@ import java.util.List;
 import java.util.Locale;
 
 import shine.com.doorscreen.activity.MainActivity;
-import shine.com.doorscreen.database.DoorScreenDataBase;
 import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.mqtt.bean.ReStart;
 import shine.com.doorscreen.util.Common;
@@ -38,7 +35,6 @@ import static shine.com.doorscreen.activity.MainActivity.REBOOT;
 import static shine.com.doorscreen.activity.MainActivity.REMOVE_CLOSE;
 import static shine.com.doorscreen.activity.MainActivity.RESTART;
 import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA;
-import static shine.com.doorscreen.activity.MainActivity.SCAN_MEDIA_INTERVAL;
 import static shine.com.doorscreen.activity.MainActivity.SCREEN_SWITCH;
 import static shine.com.doorscreen.activity.MainActivity.SWITCH_SET;
 import static shine.com.doorscreen.activity.MainActivity.VOLUME_SET;
@@ -108,7 +104,7 @@ public class DoorService extends Service implements Handler.Callback {
         int current_second = Calendar.getInstance().get(Calendar.SECOND);
         Log.d(TAG, "current_second:" + current_second);
         //整分扫描多媒体和跑马灯
-        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
+//        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
 
         //音量设置
         mHandler.sendEmptyMessageDelayed(VOLUME_SET, 10 * 1000);
@@ -129,17 +125,12 @@ public class DoorService extends Service implements Handler.Callback {
                 mHandler.sendEmptyMessage(VOLUME_SET);
                 break;
             case REBOOT:
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        new RootCommand().exeCommand("reboot");
-                    }
-                });
+                mHandler.post(() -> new RootCommand().exeCommand("reboot"));
                 break;
             case DOWNLOAD_DONE:
             case MEDIA_STOP:
             case MEDIA_DELETE:
-                updateScanMedia();
+//                updateScanMedia();
                 break;
             case CLOSE:
                 Log.d(TAG, "收到最新的关机操作 ");
@@ -151,7 +142,7 @@ public class DoorService extends Service implements Handler.Callback {
             //处理系统呼叫，如果在关屏状态需要开屏
             case CALL_ON:
                 mHandler.post(() -> {
-                    if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                    if (!ScreenManager.getInstance().isScreenOn()) {
                         mA64Utility.OpenScreen();
                     }
                 });
@@ -160,7 +151,7 @@ public class DoorService extends Service implements Handler.Callback {
             //呼叫结束，如果之前是关屏状态要恢复
             case CALL_OFF:
                 mHandler.post(() -> {
-                    if (!ScreenManager.getInstance(DoorService.this).isScreenOn()) {
+                    if (!ScreenManager.getInstance().isScreenOn()) {
                         mA64Utility.CloseScreen();
                     }
                 });
@@ -236,8 +227,8 @@ public class DoorService extends Service implements Handler.Callback {
                 break;
             //每一分钟从数据库检索一次合适的多媒体素材
             case SCAN_MEDIA:
-                scanMedia();
-                mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, SCAN_MEDIA_INTERVAL);
+//                scanMedia();
+//                mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, SCAN_MEDIA_INTERVAL);
                 break;
 
         }
@@ -249,9 +240,9 @@ public class DoorService extends Service implements Handler.Callback {
      * 从数据库检索符合当前时间段的多媒体播单，若有变更发送给主页面处理
      */
     @Deprecated
-    private void scanMedia() {
+    private void scanMedia() {/*
         String[] current = mCurrentDateFormat.format(System.currentTimeMillis()).split(" ");
-        Log.d(TAG, current[0] + "--" + current[1]);
+//        Log.d(TAG, current[0] + "--" + current[1]);
         //使用格式化的当前日期和时间查询数据库符合条件的多媒体
         String ids = DoorScreenDataBase.getInstance(this).queryMediaIds(current[0], current[1]);
         Intent intent;
@@ -259,20 +250,23 @@ public class DoorService extends Service implements Handler.Callback {
         if (TextUtils.isEmpty(ids)) {
             intent = MainActivity.newIntent(MainActivity.SCAN_MEDIA, "");
             LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+//            sendBroadcastAsUser(intent,android.os.Process.myUserHandle());
         } else if (!ids.equals(mMediaIds)) {
             //如果为空删除无效的播单时间
             if (DoorScreenDataBase.getInstance(this).queryMedia(ids).size() == 0) {
                 Log.d(TAG, "invalid media time");
                 intent = MainActivity.newIntent(MainActivity.SCAN_MEDIA, "");
+//                sendBroadcastAsUser(intent,android.os.Process.myUserHandle());
                 LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
                 DoorScreenDataBase.getInstance(this).deleteInValidMediaTime(ids);
             } else {
                 //如果播单有所更新，并且内容不为空通知界面调整
                 mMediaIds = ids;
                 intent = MainActivity.newIntent(MainActivity.SCAN_MEDIA, ids);
+//                sendBroadcastAsUser(intent,android.os.Process.myUserHandle());
                 LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
             }
-        }
+        }*/
     }
 
 
@@ -280,7 +274,7 @@ public class DoorService extends Service implements Handler.Callback {
      * 执行开关屏
      */
     private void executeScreenOnOff() {
-        ScreenManager screenManager = ScreenManager.getInstance(this);
+        ScreenManager screenManager = ScreenManager.getInstance();
         screenManager.scheduleScreenOnOff();
         if (screenManager.isScreenOn()) {
             mA64Utility.OpenScreen();
@@ -296,7 +290,7 @@ public class DoorService extends Service implements Handler.Callback {
      * 执行音量设置
      */
     private void executeVolumeSet() {
-        VolumeManager volumeManager = VolumeManager.getInstance(this);
+        VolumeManager volumeManager = VolumeManager.getInstance();
         volumeManager.scheduleVolume();
         mHandler.removeMessages(VOLUME_SET);
         mHandler.sendEmptyMessageDelayed(VOLUME_SET, volumeManager.getOperationDelay());

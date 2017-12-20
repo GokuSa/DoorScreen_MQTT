@@ -10,6 +10,8 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 
+import shine.com.doorscreen.app.AppEntrance;
+
 /**
  * author:
  * 时间:2017/9/19
@@ -20,21 +22,25 @@ import java.util.Locale;
 
 public class VolumeManager {
     private static final String TAG = "VolumeManager";
-    private Context mContext;
-    private static VolumeManager sVolumeManager;
+    private volatile static VolumeManager sVolumeManager;
     private long mOperationDelay=0;
     private SimpleDateFormat mDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
 
-    private VolumeManager(Context context) {
+  /*  private VolumeManager(Context context) {
         if (context == null) {
             throw new NullPointerException("context can not be null");
         }
         mContext = context.getApplicationContext();
-    }
+    }*/
+    private VolumeManager(){}
 
-    public static synchronized VolumeManager getInstance(Context context) {
+    public  static VolumeManager getInstance() {
         if (sVolumeManager == null) {
-            sVolumeManager = new VolumeManager(context);
+            synchronized (VolumeManager.class) {
+                if (sVolumeManager == null) {
+                    sVolumeManager = new VolumeManager();
+                }
+            }
         }
         return sVolumeManager;
     }
@@ -44,7 +50,7 @@ public class VolumeManager {
      * 获取白天和晚上的节点
      */
     public void scheduleVolume() {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(AppEntrance.getAppEntrance());
         //白天音量
         int dayVolume = preferences.getInt("volumeDay", 30);
         //晚上音量
@@ -90,7 +96,7 @@ public class VolumeManager {
             Log.d(TAG, "设置明天白天音量时间" + mDateFormat.format(calendar.getTimeInMillis()));
         }
         Log.d(TAG, "设置当前音量:" + volume);
-        AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = (AudioManager) AppEntrance.getAppEntrance().getSystemService(Context.AUDIO_SERVICE);
         int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC,max * volume / 100, AudioManager.FLAG_SHOW_UI);
     }
@@ -101,7 +107,7 @@ public class VolumeManager {
 
     public  void saveVolumeParam(int volumeDay, int volumeNight, int volumeDayStartHour,
                                  int volumeDayStartMin, int volumeDayEndHour, int volumeDayEndMin) {
-        PreferenceManager.getDefaultSharedPreferences(mContext).edit().
+        PreferenceManager.getDefaultSharedPreferences(AppEntrance.getAppEntrance()).edit().
                 putInt("volumeDay",volumeDay).
                 putInt("volumeNight",volumeNight).
                 putInt("volumeDayStartHour",volumeDayStartHour).

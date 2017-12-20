@@ -1,15 +1,22 @@
 package shine.com.doorscreen.fragment;
 
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.databinding.DataBindingUtil;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,34 +29,48 @@ import android.widget.ViewSwitcher;
 import com.bumptech.glide.Glide;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.R;
-import shine.com.doorscreen.database.DoorScreenDataBase;
+import shine.com.doorscreen.activity.MainActivity;
+import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.databinding.FragmentMediaBinding;
-import shine.com.doorscreen.entity.Elements;
+import shine.com.doorscreen.entity.Element;
+import shine.com.doorscreen.entity.Mission;
+import shine.com.doorscreen.entity.PlayTime;
+import shine.com.doorscreen.mqtt.MQTTClient;
+import shine.com.doorscreen.service.DownLoadService;
+import shine.com.doorscreen.util.DateFormatManager;
 
 /**
  * A simple {@link Fragment} subclass.
- *
+ * <p>
  * 视频和图片轮播
  */
 public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionListener, MediaPlayer.OnErrorListener, ViewSwitcher.ViewFactory {
     private static final String TAG = "MediaFragment";
-    private static final int NEXT_PICTURE = 0;
-   private VideoView mVideoView;
-   private ImageSwitcher mImageSwitch;
-   private ViewSwitcher mViewSwitch;
+    //宣教信息下載廣播action
+    private static final String MEDIA_ACTION = "com.action.media";
+    //视频和图片目录
+    private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+    private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+    private VideoView mVideoView;
+    private ImageSwitcher mImageSwitch;
+    private ViewSwitcher mViewSwitch;
     /**
      * 需要播放的视频文件
      */
-    private List<File> mVideoPath = new ArrayList<>();
+    private CopyOnWriteArrayList<File> mVideoPath = new CopyOnWriteArrayList<>();
     /**
      * 展示的图片文件
      */
-    private List<File> mImagePath=new ArrayList<>();
+    private CopyOnWriteArrayList<File> mImagePath = new CopyOnWriteArrayList<>();
 
+    private SparseArray<Mission> mMissions;
     /**
      * 当前播放视频文件的索引，用来循环播放
      */
@@ -57,65 +78,82 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     /**
      * 当前展示图片的索引
      */
-    private int mPictureIndex =0;
+    private int mPictureIndex = 0;
 
     //頁面是否可見
-    private boolean isVisible=false;
+    private boolean isVisible = false;
     //控件是否初始化
-    private boolean isPrepared=false;
+    private boolean isPrepared = false;
     /**
      * 图片切换的间隙，后台有传数据，目前本地写死
      */
     private static final long INTERVAL = 30 * 1000;
-    @SuppressWarnings("handlerleak")
-    private Handler mHandler=new Handler(){
+    private FragmentMediaBinding mMediaBinding;
+    private DateFormatManager mDateFormatManager;
+    private MainHandler mHandler;
+
+    private static class MainHandler extends Handler {
+        private WeakReference<MediaFragment> mReference;
+        private static final int MSG_RESCHEDULE = 1;
+        //重新获取播放列表标记
+        private static final int MSG_UPDATE = 2;
+        private static final int MSG_NEXT = 3;
+
+        public MainHandler(MediaFragment mediaFragment) {
+            mReference = new WeakReference<>(mediaFragment);
+        }
+
         @Override
         public void handleMessage(Message msg) {
+            MediaFragment mediaFragment = mReference.get();
+            if (mediaFragment == null) {
+                return;
+            }
             switch (msg.what) {
-                //播放下一张图片
-                case NEXT_PICTURE:
-                    //如果是最后一张
-                    if (mPictureIndex + 1== mImagePath.size()) {
-                        //并且有视频
-                        if (mVideoPath.size() > 0) {
-                            if (mViewSwitch.getCurrentView().getId() != R.id.videoView) {
-                                Log.d(TAG, "switch to video");
-                                mViewSwitch.showNext();
-                            }
-                            mPictureIndex=0;
-                            showVideo();
-                        }else{
-                            //没有视频，从头播放图片
-                            mPictureIndex=0;
-                            showPicture();
-                        }
-                    }else{
-                        mPictureIndex++;
-                        showPicture();
-                    }
+                case MSG_UPDATE:
+                    mediaFragment.scheduleMutilMedia();
+                    break;
+                case MSG_NEXT:
+                    mediaFragment.next();
+                    break;
+                case MSG_RESCHEDULE:
+                    mediaFragment.scheduleMutilMedia();
+                    sendEmptyMessageDelayed(MSG_RESCHEDULE, 24 * 60 * 60 * 1000);
                     break;
             }
         }
-    };
-    private FragmentMediaBinding mMediaBinding;
-
-    @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
-        Log.d(TAG, "setUserVisibleHint: "+isVisibleToUser);
-        isVisible=isVisibleToUser;
-        if (isVisibleToUser) {
-           playMedia();
-        }else{
-            onInVisible();
-        }
     }
 
-    private void onInVisible() {
-        if (isPrepared) {
-            Log.d(TAG,"停止多媒体的播放");
-            mVideoView.stopPlayback();
-            mHandler.removeMessages(NEXT_PICTURE);
+    /**
+     *
+     * 发送给此页面的广播Intent
+     *
+     */
+    public static void notifyUpdate() {
+        Intent intent = new Intent(MediaFragment.MEDIA_ACTION);
+        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).sendBroadcast(intent);
+
+    }
+
+    /*图片到视频的切换*/
+    private void next() {
+        if (mPictureIndex + 1 == mImagePath.size()) {
+            //并且有视频
+            if (mVideoPath.size() > 0) {
+                if (mViewSwitch.getCurrentView().getId() != R.id.videoView) {
+                    Log.d(TAG, "switch to video");
+                    mViewSwitch.showNext();
+                }
+                mPictureIndex = 0;
+                showVideo();
+            } else {
+                //没有视频，从头播放图片
+                mPictureIndex = 0;
+                showPicture();
+            }
+        } else {
+            mPictureIndex++;
+            showPicture();
         }
     }
 
@@ -130,37 +168,85 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "onViewCreated() called with: " );
+        Log.d(TAG, "onViewCreated() called with: ");
         mVideoView = mMediaBinding.videoView;
         mImageSwitch = mMediaBinding.imageSwitch;
         mViewSwitch = mMediaBinding.viewSwitch;
 
-        mVideoView.setOnCompletionListener(this);
-        mVideoView.setOnErrorListener(this);
         mImageSwitch.setFactory(this);
-        isPrepared=true;
-    }
+        isPrepared = true;
+        mDateFormatManager = new DateFormatManager();
+        mHandler = new MainHandler(this);
+        mMissions=new SparseArray<>();
+        MQTTClient.INSTANCE().setMeidaListener(mMediaListener);
+        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).registerReceiver(mReceiver, new IntentFilter(MEDIA_ACTION));
 
-
-
-    @Override
-    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-        Log.d(TAG, "onActivityCreated: ");
+        // TODO: 2017/12/19 没网10秒后 自己检索（没有数据库不行）
     }
 
     @Override
     public void onStart() {
         super.onStart();
         Log.d(TAG, "onStart() called");
+        mVideoView.setOnCompletionListener(this);
+        mVideoView.setOnErrorListener(this);
     }
 
     @Override
     public void onResume() {
         super.onResume();
         Log.d(TAG, "onResume() called");
-//        playMedia();
     }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        Log.d(TAG, "onPause() called");
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Log.d(TAG, "onStop() called");
+        mVideoView.setOnCompletionListener(null);
+        mVideoView.setOnErrorListener(null);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        MQTTClient.INSTANCE().removeMeidaListener();
+        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).unregisterReceiver(mReceiver);
+        Log.d(TAG, "onDestroyView: ");
+    }
+
+    @Override
+    public void onDestroy() {
+        Log.d(TAG, "onDestroy: ");
+        super.onDestroy();
+    }
+
+    @Override
+    public void setUserVisibleHint(boolean isVisibleToUser) {
+        super.setUserVisibleHint(isVisibleToUser);
+        Log.d(TAG, "setUserVisibleHint: " + isVisibleToUser);
+        isVisible = isVisibleToUser;
+        if (isVisibleToUser) {
+            playMedia();
+        } else {
+            onInVisible();
+        }
+    }
+
+    private void onInVisible() {
+        if (isPrepared) {
+            Log.d(TAG, "停止多媒体的播放");
+            mVideoView.stopPlayback();
+            mHandler.removeMessages(MainHandler.MSG_NEXT);
+        }
+    }
+
+
 
     /**
      * 播放视频
@@ -183,67 +269,48 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
             Log.d(TAG, file.getAbsolutePath());
             Glide.with(this).load(file).into(imageView);
             mImageSwitch.showNext();
-            mHandler.sendEmptyMessageDelayed(NEXT_PICTURE, INTERVAL);
+            mHandler.sendEmptyMessageDelayed(MainHandler.MSG_NEXT, INTERVAL);
         }
     }
+
 
     /**
      * 1.后台每分钟检查一次多媒体素材播放时间有效性，并筛选出播单
      * 2.有变更会调用此方法 从数据库重新加载本地文件
      * 3.播放
      */
+    @Deprecated
     public void updateMedia(String ids) {
         Log.d(TAG, "updateMedia: ");
-        mPictureIndex=0;
-        mVideoIndex=0;
+        mPictureIndex = 0;
+        mVideoIndex = 0;
         if (isVisible && isPrepared) {
             //如果当前是视频，停止
-            if (mViewSwitch.getCurrentView().getId()== R.id.videoView) {
+            if (mViewSwitch.getCurrentView().getId() == R.id.videoView) {
                 mVideoView.stopPlayback();
-            }else{
+            } else {
                 //如果是图片，停止切换
-                mHandler.removeMessages(NEXT_PICTURE);
+                mHandler.removeMessages(MainHandler.MSG_NEXT);
             }
         }
-        getLocalMedia(ids);
         playMedia();
     }
 
-    /**
-     * @param ids 播单eg：3，4
-     * 根据播单从数据库获取宣教信息
-     */
-    private void getLocalMedia(String ids) {
-        List<Elements> elementsList = DoorScreenDataBase.getInstance(getActivity()).queryMedia(ids);
-        mVideoPath.clear();
-        mImagePath.clear();
-        for (Elements elements : elementsList) {
-            File file = new File(elements.getPath());
-            if (elements.getType() == 1) {
-                //播单可能会有重复的素材，不重复加
-                if (file.exists() && !mVideoPath.contains(file)) {
-                    mVideoPath.add(file);
-                }
-            } else if (elements.getType() == 2) {
-                if (file.exists() && !mImagePath.contains(file)) {
-                    mImagePath.add(file);
-                }
-            }
-        }
 
-    }
     public void playMedia() {
+        mPictureIndex = 0;
+        mVideoIndex = 0;
         if (isVisible && isPrepared) {
-            Log.d(TAG, "播放多媒体");
             //如果有视频文件就优先播
             if (mVideoPath.size() > 0) {
+                Log.d(TAG, "播放多媒体");
                 //如果当前不是视频视图就先切换一下
-                if (mViewSwitch.getCurrentView().getId()!= R.id.videoView) {
+                if (mViewSwitch.getCurrentView().getId() != R.id.videoView) {
                     mViewSwitch.showNext();
                 }
                 showVideo();
-            }else if (mImagePath.size() > 0) {
-                if (mViewSwitch.getCurrentView().getId()!= R.id.imageSwitch) {
+            } else if (mImagePath.size() > 0) {
+                if (mViewSwitch.getCurrentView().getId() != R.id.imageSwitch) {
                     mViewSwitch.showNext();
                 }
                 showPicture();
@@ -253,66 +320,34 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
 
     /**
      * 播放完成，切换到下一个视频
+     * 也是视频到图片的切换
      */
     @Override
     public void onCompletion(MediaPlayer mp) {
         Log.d(TAG, "on completion");
         //如果是最后一个视频
-        if (mVideoIndex +1==mVideoPath.size()) {
+        if (mVideoIndex + 1 == mVideoPath.size()) {
             //并且图片不为空
-            if (mImagePath.size()>0) {
+            if (mImagePath.size() > 0) {
                 //如果当前是视频视图，应该是视频视图，先判断一下
                 if (mViewSwitch.getCurrentView().getId() != R.id.imageSwitch) {
                     Log.d(TAG, "switch to image");
                     mVideoView.stopPlayback();
                     mViewSwitch.showNext();
                 }
-                mVideoIndex=0;
+                mPictureIndex = 0;
                 showPicture();
-            }else{
+            } else {
                 //图片为空,从头继续播放视频
-                mVideoIndex=0;
+                mVideoIndex = 0;
                 showVideo();
             }
-        }else{
+        } else {
             //播放下一个视频
             mVideoIndex++;
             showVideo();
         }
 
-    }
-
-
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        Log.d(TAG, "onPause() called");
-    }
-
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        Log.d(TAG, "onStop() called");
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        Log.d(TAG, "onDestroyView: ");
-    }
-
-    @Override
-    public void onDestroy() {
-        Log.d(TAG, "onDestroy: ");
-        super.onDestroy();
-    }
-
-    @Override
-    public void onLowMemory() {
-        Log.d(TAG, "onLowMemory: ");
-        super.onLowMemory();
     }
 
     @Override
@@ -326,6 +361,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
 
     /**
      * 播放错误处理
+     *
      * @return 返回true 表示不弹出错误提示对话框
      */
     @Override
@@ -335,12 +371,217 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
         switch (what) {
             case MediaPlayer.MEDIA_ERROR_SERVER_DIED:
                 Log.d(TAG, "mVideoPath.get(mVideoIndex):" + mVideoPath.get(mVideoIndex));
-                Log.e(TAG,"Play Error::: MEDIA_ERROR_SERVER_DIED");
+                Log.e(TAG, "Play Error::: MEDIA_ERROR_SERVER_DIED");
                 break;
             case MediaPlayer.MEDIA_ERROR_UNKNOWN:
-                Log.e(TAG,"Play Error::: MEDIA_ERROR_UNKNOWN");
+                Log.e(TAG, "Play Error::: MEDIA_ERROR_UNKNOWN");
                 break;
         }
         return true;
     }
+
+    //宣教信息的接受監聽
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //下载完成通知
+            Log.d(TAG, "onReceive:scheduleMutilMedia");
+            scheduleMutilMedia();
+        }
+    };
+    /**
+     * 安排多媒体播放  如果检索到本地有在当前时间段播放的多媒体会请求Activity切换
+     * 先从多媒体日期表获取符合条件的播单id，在根据时间表安排播放时间
+     * 1.获取符合条件的播放列表
+     * 2.安排下一次更新
+     */
+    private void scheduleMutilMedia() {
+        Log.d(TAG, "scheduleMutilMedia: ");
+        mHandler.removeCallbacksAndMessages(null);
+        //安排明天凌晨的更新
+        mHandler.sendEmptyMessageDelayed(MainHandler.MSG_RESCHEDULE, mDateFormatManager.millisToWeeHour());
+        List<Element> playList = new ArrayList<>();
+        for (int i = 0,size=mMissions.size(); i < size; i++) {
+            Mission mission = mMissions.valueAt(i);
+            Log.d(TAG,"mission "+ mission.toString());
+//            当前播单是否在播放日期内,并且是发布状态
+            if (mDateFormatManager.isMeidaDateBetween(mission.getStartdate(), mission.getStopdate())&&mission.getType()==2) {
+                Log.d(TAG, "date pass");
+                List<PlayTime> playtimes = mission.getPlaytimes();
+                for (PlayTime playtime : playtimes) {
+                    try {
+//                        获取当前时间和播放开始和结束时间差
+                        long[] margins = mDateFormatManager.calculatePlayingTime(playtime.getStart(), playtime.getStop());
+                        if (margins[0] < 0) {
+                            //还没到播放时间,安排定时更新 重新检索
+                            Log.d(TAG, "scheduleMutilMedia: not yet");
+                            mHandler.sendEmptyMessageDelayed(MainHandler.MSG_UPDATE, -margins[0]);
+//                            只要有一个playtime满足 就没必要计算下一个
+                            break;
+                        } else if (margins[0] >= 0 && margins[1] <= 0) {
+                            //在播放时间内立马添加到播放集合，同时安排下次结束更新
+                            Log.d(TAG, "just in time");
+                            playList.addAll(mission.getSource());
+                            mHandler.sendEmptyMessageDelayed(MainHandler.MSG_UPDATE, -margins[1]);
+                            break;
+                        } else {
+                            Log.d(TAG, "out of play time");
+                        }
+                    } catch (ParseException | IllegalArgumentException e) {
+                        e.printStackTrace();
+                        Log.e(TAG, "scheduleMutilMedia: out of expect");
+                    }
+                }
+            }
+        }
+        updatePlayList(playList);
+    }
+
+
+    /**
+     * 更新播放列表
+     * @param elements
+     */
+    private void updatePlayList(List<Element> elements) {
+        Log.d(TAG, "updatePlayList: ");
+        if (mVideoView.isPlaying()) {
+            mVideoView.stopPlayback();
+        }
+        mVideoPath.clear();
+        mImagePath.clear();
+        for (Element mutilMedia : elements) {
+            if (mutilMedia.getType() == 1) {
+                File file = new File(mFileMovies.getAbsolutePath(),mutilMedia.getName());
+                //播单可能会有重复的素材，不重复加
+                if (file.exists()) {
+                    mVideoPath.addIfAbsent(file);
+                }
+            } else if (mutilMedia.getType() == 2) {
+                File file = new File(mFilePicture.getAbsolutePath(),mutilMedia.getName());
+                if (file.exists()) {
+                    mImagePath.addIfAbsent(file);
+                }
+            }
+        }
+        Log.d(TAG, "video"+mVideoPath.toString());
+        Log.d(TAG, "image "+mImagePath.toString());
+        MainActivity activity = (MainActivity) getActivity();
+        boolean canPlay=mVideoPath.size() > 0 || mImagePath.size() > 0;
+        //可见
+        if (isVisible&&canPlay) {
+            playMedia();
+        }else if(isVisible&&!canPlay){
+//            可见 不能播 切换
+            activity.requestPlayMedia(false);
+        } else if (!isVisible && canPlay) {
+//            不可见 能播
+            activity.requestPlayMedia(true);
+        }else{
+            Log.d(TAG, "不可见 不能播");
+        }
+
+    }
+
+    private OnMutilMediaListener mMediaListener=new OnMutilMediaListener() {
+        @Override
+        public void invalidateMission(int type, int missionId) {
+            //type 0 停止  1-删除 删除之前必须先停止
+            Mission mission = mMissions.get(missionId);
+            Log.d(TAG, "mission:" + mission);
+            if (mission != null&&type==1) {
+                ArrayList<Element> elements = mission.getSource();
+                for (Element mutilMedia : elements) {
+                    Log.d(TAG, "mutilMedia:" + mutilMedia);
+                    if (mutilMedia.getType() == 1) {
+                        File file = new File(mFileMovies.getAbsolutePath(),mutilMedia.getName());
+                        if (file.exists()) {
+                            Log.d(TAG, file.getName()+" 删除");
+                            file.delete();
+                        }
+                    } else if (mutilMedia.getType() == 2) {
+                        File file = new File(mFilePicture.getAbsolutePath(),mutilMedia.getName());
+                        Log.d(TAG, file.getName()+" 删除");
+                        file.delete();
+                    }
+                }
+                mMissions.remove(missionId);
+            } else if (mission != null && type == 0) {
+//                设为停止状态
+                mission.setType(0);
+            }
+            scheduleMutilMedia();
+        }
+
+        @Override
+        public void handleNewMission(Mission mission) {
+//            更新播单
+            mMissions.put(mission.getMissionid(), mission);
+//           通知下载
+            DownLoadService.startService(mission.getSource());
+        }
+
+        @Override
+        public void SynMissions(List<Mission> missions) {
+            Log.d(TAG, "SynMissions: ");
+            //一般启动联网时调用，此时为空 不需要清空 防止中途调用
+            mMissions.clear();
+//            所有要下载的元素
+            ArrayList<Element> elements = new ArrayList<>();
+//            分类保存在内存中
+            for (Mission mission : missions) {
+                mMissions.put(mission.getMissionid(),mission);
+                elements.addAll(mission.getSource());
+            }
+//           空集合也要通知后台下载 然后在BrocastReciver中等待下载完成通知
+            DownLoadService.startService(elements);
+        }
+    };
+
+    public interface OnMutilMediaListener {
+
+        /**
+         * 停止或删除单个播单
+         * @param type 0_暂停，1_删除
+         * @param missionId 播单Id
+         */
+        void invalidateMission(int type,int missionId);
+
+        /**
+         * 发布单个播单
+         * @param mission 播单Id
+         */
+        void handleNewMission(Mission mission);
+
+        /**
+         * 处理与服务器的同步
+         * @param missions
+         */
+        void SynMissions(List<Mission> missions);
+
+    }
+ /*switch (action) {
+                //后台每分钟检索一次多媒体信息
+                case SCAN_MEDIA:
+                    String param = intent.getStringExtra("param");
+                    if (TextUtils.isEmpty(param)) {
+                        //非宣教视频阶段，切换到门口屏
+                        if (isMediaPlaying) {
+                            isMediaPlaying = false;
+                            mViewPager.setCurrentItem(0, true);
+                        }
+
+                    } else {
+                        isMediaPlaying = true;
+                        if (!isCalling) {
+                            Log.d(TAG, "is not calling ,switch to media fragment");
+                            mViewPager.setCurrentItem(1, true);
+                        } else {
+                            Log.d(TAG, "is  calling ,just to update media fragment");
+                        }
+                        mMediaFragment.updateMedia(param);
+                    }
+                    break;
+
+            }*/
+
 }
