@@ -40,49 +40,6 @@
                 android:id="@+id/date_time"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"/>
-
-           <!-- <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                >
-
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    >
-
-                    <TextView
-                        android:id="@+id/tv_date"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="@android:color/white"
-                        android:textSize="48px"
-                        tools:text="2016-5-4"/>
-
-                    <TextView
-                        android:id="@+id/tv_weekday"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_date"
-                        android:textColor="@android:color/white"
-                        android:textSize="36px"
-                        tools:text="week3"/>
-
-                    <TextView
-                        android:id="@+id/tv_time"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignEnd="@id/tv_date"
-                        android:layout_alignRight="@id/tv_date"
-                        android:layout_below="@id/tv_date"
-                        android:textColor="@android:color/white"
-                        android:textSize="36px"
-                        tools:text="week3"/>
-
-                </RelativeLayout>
-            </FrameLayout>-->
-
         </LinearLayout>
         <!--主要视图-->
         <RelativeLayout

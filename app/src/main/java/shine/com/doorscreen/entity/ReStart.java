@@ -1,4 +1,4 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 
 import android.arch.persistence.room.Entity;
 import android.arch.persistence.room.PrimaryKey;

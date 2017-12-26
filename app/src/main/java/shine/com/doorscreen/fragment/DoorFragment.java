@@ -18,6 +18,9 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -33,13 +36,12 @@ import shine.com.doorscreen.adapter.RecycleViewDivider;
 import shine.com.doorscreen.adapter.StaffAdapter;
 import shine.com.doorscreen.database.WardDataBase;
 import shine.com.doorscreen.databinding.FragmentDoor2Binding;
-import shine.com.doorscreen.mqtt.MQTTClient;
-import shine.com.doorscreen.mqtt.bean.Infusion;
-import shine.com.doorscreen.mqtt.bean.Marquee;
-import shine.com.doorscreen.mqtt.bean.MarqueeTime;
-import shine.com.doorscreen.mqtt.bean.Patient;
-import shine.com.doorscreen.mqtt.bean.Staff;
-import shine.com.doorscreen.mqtt.bean.Ward;
+import shine.com.doorscreen.entity.Infusion;
+import shine.com.doorscreen.entity.Marquee;
+import shine.com.doorscreen.entity.MarqueeTime;
+import shine.com.doorscreen.entity.Patient;
+import shine.com.doorscreen.entity.Staff;
+import shine.com.doorscreen.entity.Ward;
 import shine.com.doorscreen.util.Common;
 import shine.com.doorscreen.viewmodel.WardViewModel;
 
@@ -84,7 +86,6 @@ public class DoorFragment extends Fragment {
     private FragmentDoor2Binding mBinding;
     private StaffAdapter mStaffAdapter;
 
-    private WardViewModel mWardViewModel;
     @SuppressWarnings("handlerleak")
     private Handler mHandler = new Handler() {
         @Override
@@ -167,7 +168,6 @@ public class DoorFragment extends Fragment {
     @Override
     public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         Log.d(TAG, "onViewCreated() called with");
-        MQTTClient.INSTANCE().setDoorFragmentListener(mInteractionListener);
         isPrepared = true;
     }
 
@@ -175,9 +175,9 @@ public class DoorFragment extends Fragment {
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
         Log.d(TAG, "onActivityCreated() called with");
-        mWardViewModel = ViewModelProviders.of(this).get(WardViewModel.class);
+        WardViewModel wardViewModel = ViewModelProviders.of(this).get(WardViewModel.class);
         //病人信息
-        mWardViewModel.getPatientObserver().observe(this, new Observer<List<Patient>>() {
+        wardViewModel.getPatientObserver().observe(this, new Observer<List<Patient>>() {
             @Override
             public void onChanged(@Nullable List<Patient> patients) {
                 Log.d(TAG, "patients " + patients.toString());
@@ -185,7 +185,7 @@ public class DoorFragment extends Fragment {
             }
         });
         //病房和探视时间信息
-        mWardViewModel.getWardObserver().observe(this, new Observer<Ward>() {
+        wardViewModel.getWardObserver().observe(this, new Observer<Ward>() {
             @Override
             public void onChanged(@Nullable Ward ward) {
                 if (ward != null) {
@@ -204,7 +204,7 @@ public class DoorFragment extends Fragment {
             }
         });
         //医护人员信息
-        mWardViewModel.getStaffObserver().observe(this, new Observer<List<Staff>>() {
+        wardViewModel.getStaffObserver().observe(this, new Observer<List<Staff>>() {
             @Override
             public void onChanged(@Nullable List<Staff> staffs) {
                 Log.d(TAG, staffs.toString());
@@ -265,7 +265,6 @@ public class DoorFragment extends Fragment {
         Log.d(TAG, "onDestroyView: ");
         mBinding.marqueeView.stopMarquee();
         mBinding.dateTime.stopWork();
-        MQTTClient.INSTANCE().removeDoorFragmentListener();
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -342,19 +341,6 @@ public class DoorFragment extends Fragment {
         showCurrentDateTime();
     }
 
-    //更新重启参数
-    public void updateReStart() {
-        Log.d(TAG, "updateReStart() called");
-        /*mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mReStartParams.clear();
-                mReStartParams.addAll(mWardViewModel.getReStartParams());
-                Log.d(TAG, "mReStartParams " + mReStartParams.toString());
-            }
-        });*/
-
-    }
 
     /**
      * @param title 标题文字，区分中文和其他，显示的时候字体大小及边距区别处理
@@ -379,19 +365,28 @@ public class DoorFragment extends Fragment {
 
     }
 
-
-    public void handleInfusion(Infusion infusion, int type) {
-        switch (type) {
-            case 1:
-                if (infusion.getEvent() == 0) {
-                    addInfusion(infusion);
-                } else if (infusion.getEvent() == 1) {
-                    mDripAdapter.updateInfusion(infusion);
-                }
-                break;
-            case 2:
-                mDripAdapter.removeInfusion(infusion.getClientname());
-                break;
+    /**
+     * @param receive
+     * @param type
+     */
+    public void handleInfusion(String receive, int type) {
+        Log.d(TAG, "handleInfusion() called with: receive = [" + receive + "], type = [" + type + "]");
+        try {
+            Infusion infusion = new Gson().fromJson(receive, Infusion.class);
+            switch (type) {
+                case MainActivity.INFUSION_NEW:
+                    if (infusion.getEvent() == 0) {
+                        addInfusion(infusion);
+                    } else if (infusion.getEvent() == 1) {
+                        mDripAdapter.updateInfusion(infusion);
+                    }
+                    break;
+                case MainActivity.INFUSION_REMOVE:
+                    mDripAdapter.removeInfusion(infusion.getClientname());
+                    break;
+            }
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
         }
     }
 
@@ -514,29 +509,4 @@ public class DoorFragment extends Fragment {
         }
     };
 
-    private OnFragmentInteractionListener mInteractionListener = new OnFragmentInteractionListener() {
-        @Override
-        public void onSynSucceed() {
-            synLocalTime();
-        }
-
-        @Override
-        public void onMarqueeUpdate() {
-            updateMarquee();
-        }
-
-        @Override
-        public void updateInfusion(Infusion infusion, int type) {
-            handleInfusion(infusion, type);
-        }
-    };
-
-    public interface OnFragmentInteractionListener {
-        //与后台同步时间
-        void onSynSucceed();
-
-        void onMarqueeUpdate();
-
-        void updateInfusion(Infusion infusion, int type);
-    }
-}
+   }

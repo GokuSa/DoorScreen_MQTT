@@ -13,7 +13,6 @@ import cn.shine.curl.JniCurl;
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.entity.Element;
-import shine.com.doorscreen.fragment.MediaFragment;
 import shine.com.doorscreen.util.IniReaderNoSection;
 import shine.com.doorscreen.util.LogUtil;
 
@@ -127,7 +126,7 @@ public class DownLoadService extends IntentService {
                 return ;
             }
             //本地关于服务器下载的配置文件
-            IniReaderNoSection inir = new IniReaderNoSection(AppEntrance.ETHERNET_PATH);
+            IniReaderNoSection inir = new IniReaderNoSection(LocalParameter.ETHERNET_PATH);
             //需要下载文件的路径前缀，包括ftp地址，端口
             String mHeader = String.format("ftp://%s:%s", inir.getValue("ftpip"), inir.getValue("ftpport"));
             curl.setOnlyHeader(0);
@@ -165,7 +164,8 @@ public class DownLoadService extends IntentService {
             }
             curl.finishOnce();
             //通知多媒体页面重新检索
-            MediaFragment.notifyUpdate();
+            MainActivity.sendUpdate(MainActivity.MEDIA_DOWNLOAD);
+//            MediaFragment.notifyUpdate();
         } catch (Exception e) {
             e.printStackTrace();
         }

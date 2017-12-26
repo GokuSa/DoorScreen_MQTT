@@ -3,6 +3,7 @@ package cn.shine.curl;
 import android.util.Log;
 
 import shine.com.doorscreen.app.AppEntrance;
+import shine.com.doorscreen.service.LocalParameter;
 import shine.com.doorscreen.util.IniReaderNoSection;
 
 
@@ -139,7 +140,7 @@ public class JniCurl {
 	public int initOnce() {
 		Log.i("info", "调用了init");
 		int init = this.init();
-		IniReaderNoSection inir = new IniReaderNoSection(AppEntrance.ETHERNET_PATH);
+		IniReaderNoSection inir = new IniReaderNoSection(LocalParameter.ETHERNET_PATH);
 		String ftppasswd = inir.getValue("ftppasswd");
 		String ftpusr = inir.getValue("ftpusr");
 		if (0 != init) {

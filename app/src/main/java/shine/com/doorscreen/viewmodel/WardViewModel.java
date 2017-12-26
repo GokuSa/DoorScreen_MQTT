@@ -7,10 +7,10 @@ import android.arch.lifecycle.LiveData;
 import java.util.List;
 
 import shine.com.doorscreen.database.WardDataBase;
-import shine.com.doorscreen.mqtt.bean.Patient;
-import shine.com.doorscreen.mqtt.bean.ReStart;
-import shine.com.doorscreen.mqtt.bean.Staff;
-import shine.com.doorscreen.mqtt.bean.Ward;
+import shine.com.doorscreen.entity.Patient;
+import shine.com.doorscreen.entity.ReStart;
+import shine.com.doorscreen.entity.Staff;
+import shine.com.doorscreen.entity.Ward;
 
 /**
  * author:

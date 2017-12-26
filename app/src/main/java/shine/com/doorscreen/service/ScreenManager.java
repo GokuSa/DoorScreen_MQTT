@@ -6,9 +6,15 @@ import android.util.Log;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 
+import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
+import shine.com.doorscreen.entity.SystemInfo;
+import shine.com.doorscreen.entity.SystemLight;
+
+import static java.lang.Integer.parseInt;
 
 /**
  * author:
@@ -45,7 +51,6 @@ public class ScreenManager {
         }
         return sScreenManager;
     }
-
 
 
     /**
@@ -97,24 +102,58 @@ public class ScreenManager {
         //如果还没到开始几点
         if (current < startTime) {
             //light vaule>0，startTime是开屏起始，没到就是关屏状态，反过来就是开屏状态
-            mScreenStatus = light_value>0?SCREEN_OFF:SCREEN_ON;
+            mScreenStatus = light_value > 0 ? SCREEN_OFF : SCREEN_ON;
             mOperationDelay = startTime - current;
             Log.d(TAG, "下个状态执行延迟" + mOperationDelay);
         } else if (current >= startTime && current < endTime) {
             //如果在时间里,就是light vaule的状态
-            mScreenStatus = light_value>0?SCREEN_ON:SCREEN_OFF;
+            mScreenStatus = light_value > 0 ? SCREEN_ON : SCREEN_OFF;
             mOperationDelay = endTime - current;
             Log.d(TAG, "下个状态执行延迟" + mOperationDelay);
         } else {
 //            mScreenStatus = SCREEN_OFF;
             //过了结束时间点，状态翻转
-            mScreenStatus = light_value>0?SCREEN_OFF:SCREEN_ON;
+            mScreenStatus = light_value > 0 ? SCREEN_OFF : SCREEN_ON;
             //设置明天状态，前提是后设置开始时间点
             calendar.add(Calendar.DAY_OF_MONTH, 1);
             mOperationDelay = calendar.getTimeInMillis() - current;
             Log.d(TAG, "超过结束时间，下个状态执行明天延迟:" + mOperationDelay);
         }
 
+    }
+
+    /**
+     * 处理开关屏
+     *
+     * @param
+     */
+    public void handleScreenOnOff(SystemInfo systemInfo) {
+        //13表示类型是门口屏，其他类型不处理
+        if (systemInfo != null && 13 == systemInfo.getClienttype()) {
+            List<SystemLight> datalist = systemInfo.getDatalist();
+            if (datalist != null && datalist.size() > 0) {
+                //最后一个数据是有用的，其他无用
+                SystemLight lightParam = datalist.get(datalist.size() - 1);
+                String[] start = lightParam.getStart().split(":");
+                int openScreenHour = 0;
+                int openScreenMinute = 0;
+                int closeScreenHour = 0;
+                int closeScreenMinute = 0;
+                if (start.length > 1) {
+                    openScreenHour = parseInt(start[0]);
+                    openScreenMinute = parseInt(start[1]);
+                }
+                String[] end = lightParam.getStop().split(":");
+                if (end.length > 1) {
+                    closeScreenHour = parseInt(end[0]);
+                    closeScreenMinute = parseInt(end[1]);
+                }
+                //保存到本地
+                saveScreenOnOffParams(openScreenHour, openScreenMinute, closeScreenHour, closeScreenMinute, lightParam.getValue());
+                //通知后台更新
+                DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.SCREEN_SWITCH, "");
+            }
+        }
     }
 
     public long getOperationDelay() {

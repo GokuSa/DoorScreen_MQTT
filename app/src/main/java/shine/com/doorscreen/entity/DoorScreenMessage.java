@@ -1,4 +1,4 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 
 import java.util.List;
 
@@ -49,16 +49,8 @@ public class DoorScreenMessage {
         return department;
     }
 
-    public void setDepartment(String department) {
-        this.department = department;
-    }
-
     public String getRoomId() {
         return roomId;
-    }
-
-    public void setRoomId(String roomId) {
-        this.roomId = roomId;
     }
 
     public String getRoomname() {

@@ -12,6 +12,9 @@ import android.widget.Toast;
 
 import com.shine.timingboot.TimingBootUtils;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -19,16 +22,17 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Enumeration;
 import java.util.Locale;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import shine.com.doorscreen.service.LocalParameter;
 
 
 /**
  * Created by Administrator on 2016/6/17.
  * 常用工具
  * java -jar E:\sign\801\signapk.jar E:\myWork\2016\r16\platform.x509.pem E:\myWork\2016\r16\platform.pk8 E:\myWork\2016\r16\Launcher\bin\Launcher.apk C:\Users\PANPAN\Desktop\Launcher-R16.apk
- *
- *
  */
 public class Common {
     private static final String TAG = "CommonUtil";
@@ -65,11 +69,11 @@ public class Common {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
                 dpVal, context.getResources().getDisplayMetrics());
     }
+
     public static float sp2px(Context context, float dpVal) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
                 dpVal, context.getResources().getDisplayMetrics());
     }
-
 
 
     /**
@@ -88,7 +92,7 @@ public class Common {
             }
             //6个字节，48位
             byte[] bytes = NIC.getHardwareAddress();
-            if ( null==bytes || bytes.length==0) {
+            if (null == bytes || bytes.length == 0) {
                 return "";
             }
             for (byte b : bytes) {
@@ -106,9 +110,10 @@ public class Common {
 
     /**
      * 获取ip地址
+     *
      * @return
      */
-    public static String getIpAddress()  {
+    public static String getIpAddress() {
         String ip = "";
         try {
             Enumeration<NetworkInterface> netInterfaces = NetworkInterface.getNetworkInterfaces();
@@ -119,7 +124,7 @@ public class Common {
                     while (inetAddresses.hasMoreElements()) {
                         InetAddress inetAddress = inetAddresses.nextElement();
                         //不是环回地址,不是ip6地址
-                        if (!inetAddress.isLoopbackAddress()&&!inetAddress.getHostAddress().contains("::")) {
+                        if (!inetAddress.isLoopbackAddress() && !inetAddress.getHostAddress().contains("::")) {
                             ip = inetAddress.getHostAddress();
                             Log.d(TAG, ip);
                         }
@@ -134,11 +139,11 @@ public class Common {
 
 
     public static boolean isNetworkAvailable(Context context) {
-        boolean result=false;
+        boolean result = false;
         ConnectivityManager connectivityManager
                 = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
-        result=activeNetworkInfo != null && activeNetworkInfo.isConnectedOrConnecting();
+        result = activeNetworkInfo != null && activeNetworkInfo.isConnectedOrConnecting();
        /* if (!result) {
             Toast.makeText(context, "网络不可连接", Toast.LENGTH_SHORT).show();
         }*/
@@ -154,6 +159,7 @@ public class Common {
             return "";
         }
     }
+
     public static String getFileSuffix(String pathandname) {
         int start = pathandname.lastIndexOf(".");
         if (start != -1) {
@@ -165,7 +171,7 @@ public class Common {
 
     private static Toast toast = null;
 
-    public static void showToast(Context context,int text) {
+    public static void showToast(Context context, int text) {
         if (toast == null) {
             toast = Toast.makeText(context.getApplicationContext(), text, Toast.LENGTH_SHORT);
         } else {
@@ -175,15 +181,12 @@ public class Common {
     }
 
 
-
-
     public static void open(Long date) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.CHINA);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
         String start = sdf.format(date);
-        Log.d(TAG,"开机时间为"+ start);
+        Log.d(TAG, "开机时间为" + start);
         int result = new TimingBootUtils().setRtcTime(start);
     }
-
 
 
     /**
@@ -194,12 +197,13 @@ public class Common {
         calendar.set(Calendar.HOUR_OF_DAY, 23);
         calendar.set(Calendar.MINUTE, 59);
         calendar.set(Calendar.SECOND, 0);
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.CHINA);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
         String openTime = sdf.format(calendar.getTimeInMillis());
-        Log.d(TAG,"timeOpen " +openTime);
+        Log.d(TAG, "timeOpen " + openTime);
         int result = new TimingBootUtils().setRtcTime(openTime);
-        Log.d(TAG, "cancel open result:" +result);
+        Log.d(TAG, "cancel open result:" + result);
     }
+
     public static final boolean isChineseCharacter(String chineseStr) {
         char[] charArray = chineseStr.toCharArray();
         for (int i = 0; i < charArray.length; i++) {
@@ -216,7 +220,7 @@ public class Common {
 
     //截取数字
     public static int getNumbers(String content) {
-        int num=-1;
+        int num = -1;
         if (TextUtils.isEmpty(content)) {
             return num;
         }
@@ -232,5 +236,22 @@ public class Common {
             }
         }
         return num;
+    }
+
+    public static LocalParameter fetchParameter(String path) throws IOException,IllegalArgumentException {
+        if (TextUtils.isEmpty(path)) {
+            throw new IllegalArgumentException("path can't be null");
+        }
+        File file = new File(path);
+        Properties properties = new Properties();
+        properties.load(new FileInputStream(file));
+        String serverIp = properties.getProperty("commuip","");
+        String port =  properties.getProperty("commuport","");
+//        MQTT需要的格式化地址 "tcp://172.168.1.9:1883";
+         String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
+//        没有网线连接的时候 Common.getIpAddress()获取的IP无效
+        String host = properties.getProperty("ip","");
+        return new LocalParameter(host, getMacAddress(), serverUri);
+
     }
 }

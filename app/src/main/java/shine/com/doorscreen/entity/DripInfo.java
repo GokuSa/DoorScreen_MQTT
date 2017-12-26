@@ -2,8 +2,6 @@ package shine.com.doorscreen.entity;
 
 import java.util.List;
 
-import shine.com.doorscreen.app.AppEntrance;
-
 /**
  * Created by Administrator on 2016/9/21.
  * 输液信息
@@ -100,11 +98,12 @@ public class DripInfo {
         }
 
         public int getCurrentDripPackage() {
-            if (total==0) {
+           /* if (total==0) {
                 return AppEntrance.resIds[0];
             }
             int  rank = left *12/ total;
-            return AppEntrance.resIds[rank];
+            return AppEntrance.resIds[rank];*/
+           return 0;
         }
 
         public int getPatientid() {

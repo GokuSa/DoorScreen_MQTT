@@ -20,7 +20,7 @@ import java.util.Locale;
 
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.database.WardDataBase;
-import shine.com.doorscreen.mqtt.bean.ReStart;
+import shine.com.doorscreen.entity.ReStart;
 import shine.com.doorscreen.util.Common;
 import shine.com.doorscreen.util.DateFormatManager;
 import shine.com.doorscreen.util.RootCommand;
@@ -103,15 +103,13 @@ public class DoorService extends Service implements Handler.Callback {
         //当前秒数
         int current_second = Calendar.getInstance().get(Calendar.SECOND);
         Log.d(TAG, "current_second:" + current_second);
-        //整分扫描多媒体和跑马灯
-//        mHandler.sendEmptyMessageDelayed(SCAN_MEDIA, (60 - current_second) * 1000);
-
         //音量设置
         mHandler.sendEmptyMessageDelayed(VOLUME_SET, 10 * 1000);
         //开关屏设置
         mHandler.sendEmptyMessage(SWITCH_SET);
         //重启设置
-        mHandler.postDelayed(this::handleRestart, 5 * 1000);
+        mHandler.sendEmptyMessageDelayed(RESTART, 5 * 1000);
+//        mHandler.postDelayed(this::handleRestart, 5 * 1000);
     }
 
     @Override

@@ -1,6 +1,6 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 
-import shine.com.doorscreen.app.AppEntrance;
+import shine.com.doorscreen.R;
 
 /**
  * author:
@@ -51,6 +51,11 @@ public class Infusion {
     private int next_shi;
     private int next_ge;
     private String begin;
+
+    private final static int[] sResIds = new int[]{R.drawable.drip_package_empty, R.drawable.drip_package_five, R.drawable.drip_package_ten,
+            R.drawable.drip_package_fifteen, R.drawable.drip_package_twenty, R.drawable.drip_package_thirty,
+            R.drawable.drip_package_forty, R.drawable.drip_package_fifty, R.drawable.drip_package_sixty,
+            R.drawable.drip_package_seventy, R.drawable.drip_package_eighty, R.drawable.drip_package_ninty, R.drawable.drip_package_full};
 
     public Infusion() {
     }
@@ -106,10 +111,10 @@ public class Infusion {
 
     public int getCurrentDripPackage() {
         if (total==0) {
-            return AppEntrance.resIds[0];
+            return sResIds[0];
         }
         int  rank = left *12/ total;
-        return AppEntrance.resIds[rank];
+        return sResIds[rank];
     }
 
     public String getAction() {

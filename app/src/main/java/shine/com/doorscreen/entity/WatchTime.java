@@ -1,4 +1,4 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 //第一次请求的探视时间数据
 public  class WatchTime {
         /**

@@ -8,9 +8,15 @@ import android.util.Log;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 
+import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
+import shine.com.doorscreen.entity.SystemInfo;
+import shine.com.doorscreen.entity.SystemLight;
+
+import static java.lang.Integer.parseInt;
 
 /**
  * author:
@@ -115,6 +121,46 @@ public class VolumeManager {
                 putInt("volumeDayEndHour",volumeDayEndHour).
                 putInt("volumeDayEndMin",volumeDayEndMin).
                 apply();
+    }
+
+    /**
+     * 处理音量设置
+     *
+     */
+    public void handleVolumeSet(SystemInfo systemVolume) {
+            if (systemVolume != null) {
+                List<SystemLight> list = systemVolume.getDatalist();
+                if (list != null && list.size() > 1) {
+                    //这个只用来获取晚上音量
+                    SystemLight volumeNight = list.get(0);
+                    //最后一个数据有白天，晚上的分割点，及音量
+                    SystemLight volumeDay = list.get(list.size() - 1);
+                    int mVolumeNight = volumeNight.getValue();
+                    int mVolumeDay = volumeDay.getValue();
+                    Log.d(TAG, "volumeNightValue:" + mVolumeNight + "volumeDayValue:" + mVolumeDay);
+                    int mVolumeDayHour = 0;
+                    int mVolumeDayMinute = 0;
+                    int mVolumeNightHour = 0;
+                    int mVolumeNightMinute = 0;
+
+                    String[] start = volumeDay.getStart().split(":");
+                    if (start.length > 1) {
+                        mVolumeDayHour = parseInt(start[0]);
+                        mVolumeDayMinute = parseInt(start[1]);
+                        Log.d(TAG, "volumeDayPoint:" + mVolumeDayHour + "-" + mVolumeDayMinute);
+                    }
+                    String[] end = volumeDay.getStop().split(":");
+                    if (end.length > 1) {
+                        mVolumeNightHour = parseInt(end[0]);
+                        mVolumeNightMinute = parseInt(end[1]);
+                        Log.d(TAG, "volumeNightPoint:" + mVolumeNightHour + "--" + mVolumeNightMinute);
+                    }
+                    saveVolumeParam(mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
+                            mVolumeNightHour, mVolumeNightMinute);
+                    DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.VOLUME_SWITCH, "");
+
+                }
+            }
     }
 
 }

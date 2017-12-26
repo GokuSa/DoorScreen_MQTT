@@ -10,7 +10,7 @@ import java.util.List;
 
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.databinding.ItemPaientInfoBinding;
-import shine.com.doorscreen.mqtt.bean.Patient;
+import shine.com.doorscreen.entity.Patient;
 import shine.com.doorscreen.util.Common;
 
 /**

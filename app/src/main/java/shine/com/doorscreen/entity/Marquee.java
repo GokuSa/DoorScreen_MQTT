@@ -1,4 +1,4 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 
 import android.arch.persistence.room.Entity;
 import android.arch.persistence.room.Ignore;
@@ -25,20 +25,15 @@ public class Marquee {
     private String message;
     private String startdate;
     private String stopdate;
+    @Ignore
+    private int type;
     private int status=0;
     @Ignore
     private List<MarqueeTime> playtimes;
     public Marquee() {}
 
-    @Ignore
-    public Marquee(int marqueeId, String message, String startDate, String stopDate, String startTime, String stopTime, int status) {
-//        this.marqueeId = marqueeId;
-        this.message = message;
-//        this.startDate = startDate;
-//        this.stopDate = stopDate;
-//        this.startTime = startTime;
-//        this.stopTime = stopTime;
-        this.status = status;
+    public int getType() {
+        return type;
     }
 
     public int getMarqueeid() {

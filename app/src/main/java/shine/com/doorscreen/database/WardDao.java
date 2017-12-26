@@ -10,7 +10,7 @@ import android.arch.persistence.room.Update;
 
 import java.util.List;
 
-import shine.com.doorscreen.mqtt.bean.Ward;
+import shine.com.doorscreen.entity.Ward;
 
 /**
  * author:

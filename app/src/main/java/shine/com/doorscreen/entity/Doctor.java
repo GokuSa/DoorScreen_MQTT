@@ -1,4 +1,4 @@
-package shine.com.doorscreen.mqtt.bean;
+package shine.com.doorscreen.entity;
 
 public class Doctor extends Staff {
 

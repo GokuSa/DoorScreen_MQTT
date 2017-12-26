@@ -9,7 +9,7 @@ import android.arch.persistence.room.Update;
 
 import java.util.List;
 
-import shine.com.doorscreen.mqtt.bean.Marquee;
+import shine.com.doorscreen.entity.Marquee;
 
 /**
  * author:

@@ -7,7 +7,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import shine.com.doorscreen.mqtt.bean.MutilMediaTime;
+import shine.com.doorscreen.entity.MutilMediaTime;
 
 /**
  * author:

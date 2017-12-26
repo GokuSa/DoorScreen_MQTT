@@ -19,7 +19,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import shine.com.doorscreen.entity.PlayTime;
+import shine.com.doorscreen.entity.Transfer;
 
+import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 
 /**
@@ -146,10 +148,12 @@ public class UnitTest {
         playTimes.add(playTime);
         String output = gson.toJson(playTimes);
         System.out.println(output);
-        Type typeCollection = new TypeToken<List<PlayTime>>() {
-        }.getType();
+        Type typeCollection = new TypeToken<List<PlayTime>>() {}.getType();
         List<PlayTime> playTimes2 = gson.fromJson(output, typeCollection);
         System.out.println(playTimes2.toString());
+
+        Transfer transfer = gson.fromJson("", Transfer.class);
+        assertNull(transfer);
     }
 
     @Test
@@ -188,4 +192,6 @@ public class UnitTest {
             System.out.println("过了播放时间,");
         }
     }
+
+
 }

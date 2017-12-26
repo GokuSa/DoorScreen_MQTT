@@ -6,12 +6,12 @@ import android.arch.persistence.room.RoomDatabase;
 import android.content.Context;
 import android.text.TextUtils;
 
-import shine.com.doorscreen.mqtt.bean.Marquee;
-import shine.com.doorscreen.mqtt.bean.MarqueeTime;
-import shine.com.doorscreen.mqtt.bean.Patient;
-import shine.com.doorscreen.mqtt.bean.ReStart;
-import shine.com.doorscreen.mqtt.bean.Staff;
-import shine.com.doorscreen.mqtt.bean.Ward;
+import shine.com.doorscreen.entity.Marquee;
+import shine.com.doorscreen.entity.MarqueeTime;
+import shine.com.doorscreen.entity.Patient;
+import shine.com.doorscreen.entity.ReStart;
+import shine.com.doorscreen.entity.Staff;
+import shine.com.doorscreen.entity.Ward;
 
 
 /**

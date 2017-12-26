@@ -1,16 +1,23 @@
 package shine.com.doorscreen.activity;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.adapter.DoorInfoPagerAdapter;
+import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.customview.CustomViewPager;
 import shine.com.doorscreen.fragment.CallTransferDialog;
 import shine.com.doorscreen.fragment.DoorFragment;
@@ -44,19 +51,22 @@ import shine.com.doorscreen.service.DoorService;
  */
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
-    public static final int CONNECT_SERVER = 0;
+    private static final String UPDATE_ACTION = "com.action.update";
+    public static final String KEY_NAME = "name";
+    public static final String KEY_TYPE = "type";
+    public static final String KEY_FLAG = "flag";
+    public static final int CALL_TRANSFER = 0;
     public static final int MARQUEE_UPDATE = 1;
-    public static final int MARQUEE_STOP = 2;
-    public static final int MARQUEE_DELETE = 3;
-    public static final int DOOR_TITLE_UPDATE = 4;
+    public static final int INFUSION_NEW = 2;
+    public static final int INFUSION_REMOVE = 3;
+    public static final int SYN_MISSIONS = 4;
     public static final int MEDIA_DOWNLOAD = 5;
     public static final int MEDIA_STOP = 6;
     public static final int MEDIA_DELETE = 7;
-    public static final int DRIP_UPDATE = 8;
-    public static final int DOCTOR_INFO = 9;
-    public static final int NURSOR_INFO = 44;
-    public static final int CALL_INFO = 10;
-    public static final int PATIENT_INFO = 11;
+    public static final int UPDATE_MISSION = 8;
+    public static final int INTERNET_OUT = 9;
+    public static final int INTERNET_RECOVERY = 10;
+    public static final int ANOTHER_DAY = 11;
     public static final int SCREEN_SWITCH = 12;
     public static final int VOLUME_SWITCH = 13;
     public static final int REBOOT = 14;
@@ -65,12 +75,10 @@ public class MainActivity extends AppCompatActivity {
     public static final int DOWNLOAD_DONE = 40;
     public static final int DRIP_DONE = 42;
     public static final int SCAN_MEDIA = 45;
-    public static final int SCAN_MEDIA_INTERVAL = 60 * 1000;
     public static final int SCAN_MARQUEE = 46;
-    public static final int SCAN_MARQUEE_INTERVAL = 60 * 1000;
     public static final int STOP_DRIP = 51;
     public static final int STOP_ALL_DRIP = 52;
-    public static final int CHECK_TIME = 53;
+    public static final int SYN_TIME = 53;
     //显示门灯
     public static final int SHOW_DOOR_LIGHT = 54;
     public static final int PUSHPOSITION = 55;
@@ -104,8 +112,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initView();
-        MQTTClient.INSTANCE().startConnect();
-        MQTTClient.INSTANCE().setMqttListner(mMqttListener);
+        try {
+            MQTTClient.INSTANCE().startConnect();
+
+        } catch (IOException e) {
+            Log.e(TAG, "startConnect: 请检查/extdata/work/show/system/network.ini配置文件");
+            e.printStackTrace();
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(mReceiver, new IntentFilter(UPDATE_ACTION));
         //开启后台服务设置系统音量和开关屏
         DoorService.startService(this, -1, "");
     }
@@ -115,10 +129,86 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         //退出时确保移除所有监听
         MQTTClient.INSTANCE().exit();
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(mReceiver);
         stopService(DoorService.newIntent(this, -1, ""));
-//        todo 检查内存泄露
-        System.exit(0);
+//        System.exit(0);
     }
+    /**
+     *
+     * 发送给此页面的广播Intent
+     *
+     */
+    public static void sendUpdate(int type,String name,boolean flag) {
+        Intent intent = new Intent(UPDATE_ACTION);
+        intent.putExtra(KEY_TYPE, type);
+        intent.putExtra(KEY_NAME, name);
+        intent.putExtra(KEY_FLAG, flag);
+        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).sendBroadcast(intent);
+
+    }
+    public static void sendUpdate(int type) {
+        Intent intent = new Intent(UPDATE_ACTION);
+        intent.putExtra(KEY_TYPE, type);
+        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).sendBroadcast(intent);
+    }
+
+    /**
+     * 接受后台发来的信息 根据类型通知对应页面处理
+     */
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //下载完成通知
+            int type = intent.getIntExtra(KEY_TYPE, -1);
+            Log.d(TAG, "onReceive "+type);
+
+            switch (type) {
+                case INTERNET_OUT:
+                    //断网时先关闭呼叫转移对话框如果存在的话
+                    handleCallTransfer("", false);
+                    showOutOfInternetDialog();
+                    break;
+                case INTERNET_RECOVERY:
+                    dismissOutOfInternetDialog();
+                    break;
+                case MEDIA_DOWNLOAD:
+                    mMediaFragment.scheduleMutilMedia();
+                    break;
+                case CALL_TRANSFER:
+                    handleCallTransfer(intent.getStringExtra(KEY_NAME),intent.getBooleanExtra(KEY_FLAG,false));
+                    break;
+                case MARQUEE_UPDATE:
+                    mDoorFragment.updateMarquee();
+                    break;
+                case SYN_TIME:
+                    mDoorFragment.synLocalTime();
+                    break;
+                case SYN_MISSIONS:
+                    if (mMediaFragment != null) {
+
+                        mMediaFragment.synVideoMissions(intent.getStringExtra(KEY_NAME));
+                    }
+                    break;
+                case UPDATE_MISSION:
+                    mMediaFragment.handleSingleVideoMission(intent.getStringExtra(KEY_NAME));
+                    break;
+                case INFUSION_NEW:
+                case INFUSION_REMOVE:
+                    mDoorFragment.handleInfusion(intent.getStringExtra(KEY_NAME),type);
+                    break;
+                case ANOTHER_DAY:
+                    //新的一天 重新安排视频和跑马灯
+                    mDoorFragment.updateMarquee();
+                    if (mMediaFragment != null) {
+                        mMediaFragment.scheduleMutilMedia();
+                    }
+                    break;
+            }
+
+        }
+    };
+
+
 
     /**
      * 显示网络断开连接对话框
@@ -126,11 +216,12 @@ public class MainActivity extends AppCompatActivity {
     private void showOutOfInternetDialog() {
         WaitingDialog dialog = (WaitingDialog) getSupportFragmentManager().findFragmentByTag("dialog_out_of_internet");
         FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        if (dialog != null) {
-            fragmentTransaction.remove(dialog);
+        if (dialog == null) {
+//            fragmentTransaction.remove(dialog);
+            dialog = WaitingDialog.newInstance("");
+            dialog.show(fragmentTransaction, "dialog_out_of_internet");
         }
-        dialog = WaitingDialog.newInstance("");
-        dialog.show(fragmentTransaction, "dialog_out_of_internet");
+
     }
 
     /**
@@ -162,42 +253,27 @@ public class MainActivity extends AppCompatActivity {
         mViewPager.setPagingEnabled(false);
     }
 
-
-    private MqttListener mMqttListener = new MqttListener() {
-        /**
-         * 处理呼叫转移对话框
-         * 先移除之前的对话框，显示最新的
-         * 如果show=false,就是关闭
-         *
-         * @param tip
-         * @param show
-         */
-        @Override
-        public void handleCallTransfer(String tip, boolean show) {
-            CallTransferDialog fragment = (CallTransferDialog) getSupportFragmentManager().findFragmentByTag("call_transfer");
-            if (fragment != null) {
-                getSupportFragmentManager().beginTransaction().remove(fragment).commit();
-            }
-            if (show) {
-                fragment = CallTransferDialog.newInstance(tip);
-                fragment.show(getSupportFragmentManager(), "call_transfer");
-            }
-            //切换页面
-            requestShowDoorFragment(show);
+    /**
+     * 处理呼叫转移对话框
+     * 先移除之前的对话框，显示最新的
+     * 如果show=false,就是关闭
+     *
+     * @param tip
+     * @param show
+     */
+    private void handleCallTransfer(String tip, boolean show) {
+        CallTransferDialog fragment = (CallTransferDialog) getSupportFragmentManager().findFragmentByTag("call_transfer");
+        if (fragment != null) {
+            getSupportFragmentManager().beginTransaction().remove(fragment).commit();
         }
-
-        @Override
-        public void handleOutOfInternet() {
-            //断网时先关闭呼叫转移对话框如果存在的话
-            handleCallTransfer("", false);
-            showOutOfInternetDialog();
+        if (show) {
+            fragment = CallTransferDialog.newInstance(tip);
+            fragment.show(getSupportFragmentManager(), "call_transfer");
         }
+        //切换页面
+        requestShowDoorFragment(show);
+    }
 
-        @Override
-        public void handleInternetRecovery() {
-            dismissOutOfInternetDialog();
-        }
-    };
 
     /**
      * 视频宣教页面请求播放多媒体
@@ -226,16 +302,6 @@ public class MainActivity extends AppCompatActivity {
             //呼叫结束,如果多媒体是播放状态
             mViewPager.setCurrentItem(1, true);
         }
-    }
-
-    public interface MqttListener {
-        //处理呼叫转移
-        void handleCallTransfer(String tip, boolean show);
-
-        void handleOutOfInternet();
-
-        void handleInternetRecovery();
-
     }
 
 

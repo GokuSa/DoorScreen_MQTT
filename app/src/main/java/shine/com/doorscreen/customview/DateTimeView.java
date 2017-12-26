@@ -16,14 +16,15 @@ import java.util.Calendar;
 import java.util.Locale;
 
 import shine.com.doorscreen.R;
+import shine.com.doorscreen.activity.MainActivity;
 
 /**
  * author:
  * 时间:2017/12/1
  * qq:1220289215
  * 类描述：组合自定义控件 显示日期
- * 旋转是否会泄露
  * 格式化当前时间为 年 月 日  星期几，比如2016年8月10日 星期三
+ * 在新的一天发广播通知
  */
 
 public class DateTimeView extends RelativeLayout {
@@ -89,7 +90,7 @@ public class DateTimeView extends RelativeLayout {
                 case MSG_SHOW_CURRENT_DATE:
                     dateTimeView.scheduleDateTime();
                     break;
-//                更新分钟
+//                更新
                 case MSG_UPDATE_TIME:
                     dateTimeView.showTime();
                     sendEmptyMessageDelayed(MSG_UPDATE_TIME,  1000);
@@ -97,6 +98,7 @@ public class DateTimeView extends RelativeLayout {
 //                    每天凌晨更新日期
                 case MSG_UPDATE_DATE_TIME:
                     dateTimeView.showDateTime();
+                    MainActivity.sendUpdate(MainActivity.ANOTHER_DAY);
                     sendEmptyMessageDelayed(MSG_UPDATE_DATE_TIME, 24 * 60 * 60 * 1000);
                     break;
             }

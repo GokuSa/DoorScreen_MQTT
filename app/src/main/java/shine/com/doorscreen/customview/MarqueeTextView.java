@@ -14,7 +14,7 @@ import android.widget.OverScroller;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import shine.com.doorscreen.mqtt.bean.Marquee;
+import shine.com.doorscreen.entity.Marquee;
 import shine.com.doorscreen.util.Common;
 
 /**

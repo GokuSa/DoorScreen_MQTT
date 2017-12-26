@@ -9,7 +9,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import shine.com.doorscreen.mqtt.bean.Patient;
+import shine.com.doorscreen.entity.Patient;
 
 /**
  * author:

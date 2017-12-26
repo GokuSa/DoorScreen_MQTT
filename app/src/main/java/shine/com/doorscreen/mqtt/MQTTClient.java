@@ -1,16 +1,10 @@
 package shine.com.doorscreen.mqtt;
 
-import android.app.AlarmManager;
-import android.content.Context;
-import android.os.Environment;
-import android.os.Handler;
-import android.os.HandlerThread;
-import android.text.TextUtils;
+import android.support.annotation.WorkerThread;
 import android.util.Base64;
 import android.util.Log;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions;
@@ -21,56 +15,19 @@ import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.json.JSONObject;
 
-import java.io.File;
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 
-import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
 import shine.com.doorscreen.app.AppEntrance;
-import shine.com.doorscreen.database.WardDataBase;
-import shine.com.doorscreen.entity.Mission;
-import shine.com.doorscreen.entity.MissionInfo;
-import shine.com.doorscreen.entity.Missions;
-import shine.com.doorscreen.fragment.DoorFragment;
-import shine.com.doorscreen.fragment.MediaFragment;
-import shine.com.doorscreen.mqtt.bean.CallTransfer;
-import shine.com.doorscreen.mqtt.bean.Doctor;
-import shine.com.doorscreen.mqtt.bean.DoorScreenMessage;
-import shine.com.doorscreen.mqtt.bean.Infusion;
-import shine.com.doorscreen.mqtt.bean.Marquee;
-import shine.com.doorscreen.mqtt.bean.MarqueeInfo;
-import shine.com.doorscreen.mqtt.bean.MarqueeList;
-import shine.com.doorscreen.mqtt.bean.MarqueeTime;
-import shine.com.doorscreen.mqtt.bean.Message;
-import shine.com.doorscreen.mqtt.bean.Nurse;
-import shine.com.doorscreen.mqtt.bean.Patient;
-import shine.com.doorscreen.mqtt.bean.ReBoot;
-import shine.com.doorscreen.mqtt.bean.ReStart;
-import shine.com.doorscreen.mqtt.bean.Staff;
-import shine.com.doorscreen.mqtt.bean.SynPatient;
-import shine.com.doorscreen.mqtt.bean.SynStaff;
-import shine.com.doorscreen.mqtt.bean.SystemInfo;
-import shine.com.doorscreen.mqtt.bean.SystemLight;
-import shine.com.doorscreen.mqtt.bean.Transfer;
-import shine.com.doorscreen.mqtt.bean.VisitTime;
-import shine.com.doorscreen.mqtt.bean.Ward;
-import shine.com.doorscreen.mqtt.bean.WatchTime;
-import shine.com.doorscreen.service.DoorLightHelper;
-import shine.com.doorscreen.service.DoorService;
-import shine.com.doorscreen.service.ScreenManager;
-import shine.com.doorscreen.service.VolumeManager;
+import shine.com.doorscreen.entity.Message;
+import shine.com.doorscreen.service.LocalParameter;
 import shine.com.doorscreen.util.Common;
-import shine.com.doorscreen.util.IniReaderNoSection;
-import shine.com.doorscreen.util.RootCommand;
 
-import static java.lang.Integer.parseInt;
-import static shine.com.doorscreen.activity.MainActivity.RESTART;
-import static shine.com.doorscreen.util.Common.getMacAddress;
+import static shine.com.doorscreen.activity.MainActivity.INTERNET_OUT;
+import static shine.com.doorscreen.activity.MainActivity.INTERNET_RECOVERY;
 
 
 /**
@@ -87,17 +44,10 @@ import static shine.com.doorscreen.util.Common.getMacAddress;
 
 public class MQTTClient {
     private static final String TAG = "MQTTClient";
-    public static final String ETHERNET_PATH = "/extdata/work/show/system/network.ini";
-
     private String subscriptionTopic = "";
     private Gson mGson;
-    private String mDepartmentId = "1";
-    private String mRoomId = "1";
     private static final String USER_NAME = "shine";
     private static final String PASSWORD = "shine";
-    //视频和图片目录
-    private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-    private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
 
     private MqttAndroidClient mqttAndroidClient;
     /**
@@ -109,56 +59,24 @@ public class MQTTClient {
      */
     private static final boolean mRetained = false;
     /**
-     * 主机地址
-     */
-    private String mHost = "";
-    /**
-     * 主机mac
-     */
-    private String mClientId = "";
-    /**
      * 订阅的主题,用来取消订阅
      */
     private HashSet<String> mTopicSubscribed;
-    private Ward mWard = new Ward();
-    private WardDataBase mWardDataBase;
-    private Handler mHandler;
-
-    //    private Context mContext;
-    //门灯管理
-    private DoorLightHelper mDoorLightHelper;
-
-    private MainActivity.MqttListener mMqttListener;
-    private DoorFragment.OnFragmentInteractionListener mDoorListener;
-    private MediaFragment.OnMutilMediaListener mMeidaListener;
-
-    private CallTransfer mCallTransfer;
-    private HandlerThread mHandlerThread;
     private volatile static MQTTClient sMQTTClient;
+    /**
+     * 本地参数 服务器的ip 端口 本地ip 科室id 房间id等
+     */
+    private LocalParameter mParameter;
+    /**
+     * 处理Mqtt接受到的消息 使用BroadCast通知相关页面处理
+     */
+    private MessageProcessor mMessageProcessor;
 
     private MQTTClient() {
-        mHandlerThread = new HandlerThread("worker");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
-        //数据存储
-        mWardDataBase = WardDataBase.INSTANCE(AppEntrance.getAppEntrance());
-        mDoorLightHelper = new DoorLightHelper();
+        mMessageProcessor = new MessageProcessor();
         mTopicSubscribed = new HashSet<>();
         mGson = new Gson();
-//        从本地获取服务器的IP和端口
-        IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
-        String serverIp = inir.getValue("commuip");
-        String port = inir.getValue("commuport");
-//        MQTT需要的格式化地址 "tcp://172.168.1.9:1883";
-        final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
 
-//        没有网线连接的时候 Common.getIpAddress()获取的IP无效
-        mHost = inir.getValue("ip");
-//        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
-        mClientId = getMacAddress();
-
-        mqttAndroidClient = new MqttAndroidClient(AppEntrance.getAppEntrance(), serverUri, mClientId);
-        mqttAndroidClient.setCallback(mCallbackExtended);
     }
 
     public static MQTTClient INSTANCE() {
@@ -172,76 +90,71 @@ public class MQTTClient {
         return sMQTTClient;
     }
 
-
-    @Deprecated
-    private MQTTClient(Context context) {
-//        mMqttListener = mqttListener;
-//        mContext = context.getApplicationContext();
-        //数据存储
-        mWardDataBase = WardDataBase.INSTANCE(context);
-
-        mHandlerThread = new HandlerThread("worker");
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
-
-//        从本地获取服务器的IP和端口
-        IniReaderNoSection inir = new IniReaderNoSection(ETHERNET_PATH);
-        String serverIp = inir.getValue("commuip");
-        String port = inir.getValue("commuport");
-//        MQTT需要的格式化地址 "tcp://172.168.1.9:1883";
-        final String serverUri = String.format(Locale.CHINA, "tcp://%s:%s", serverIp, port);
-
-//        没有网线连接的时候 Common.getIpAddress()获取的IP无效
-        mHost = inir.getValue("ip");
-//        使用mac地址作为客户唯一标识,如E06417050201，无分隔符
-        mClientId = getMacAddress();
-
-        mqttAndroidClient = new MqttAndroidClient(context.getApplicationContext(), serverUri, mClientId);
-        mqttAndroidClient.setCallback(mCallbackExtended);
-    }
-
-
     /**
      * 与服务端连接，建立通信
+     * 需要在子线程执行 所以借用带有thread的MessageProcessor
+     * 最终连接还是在connect方法中
      */
-    public void startConnect() {
+    public void startConnect() throws IOException {
         Log.d(TAG, "startConnect()");
+        mParameter = Common.fetchParameter(LocalParameter.ETHERNET_PATH);
+        mqttAndroidClient = new MqttAndroidClient(AppEntrance.getAppEntrance(), mParameter.getServerUri(), mParameter.getMac());
+        mqttAndroidClient.setCallback(mCallbackExtended);
+        mMessageProcessor.handleConnect(0);
+
+    }
+
+//    连接的最终实现
+    @WorkerThread
+    void connect() throws MqttException {
+        Log.d(TAG, "try to connect");
         if (!mqttAndroidClient.isConnected()) {
-            mHandler.post(mConnectRunnable);
+            mqttAndroidClient.connect(getMqttConnectOptions(), null, mConnectListener);
         } else {
             Log.e(TAG, "startConnect: already connected");
         }
-    }
 
-    private static String getEncodeString(String raw) {
-        if (TextUtils.isEmpty(raw)) {
-            return null;
-        }
-        return Base64.encodeToString(raw.getBytes(), Base64.DEFAULT);
     }
 
     /**
      * 生成门口屏订阅的主题
-     *
+     *只在连接成功 没有 科室id和房间id时使用
      * @param departmentId
      * @param roomId
      * @param mac
      * @return
      */
+
     private String getSubscriptionTopic(String departmentId, String roomId, String mac) {
         return String.format(Locale.CHINA, "/shineecall/%s/13/%s/%s/sub", departmentId, roomId, mac);
     }
 
     /**
-     * 生成门口屏发布的主题
-     *
-     * @param departmentId
-     * @param roomId
-     * @param mac
+     * 获取门口屏的订阅主题
      * @return
      */
-    private String getpublishTopic(String departmentId, String roomId, String mac) {
-        return String.format(Locale.CHINA, "/shineecall/%s/13/%s/%s/pub", departmentId, roomId, mac);
+    private String getSubscriptionTopic() {
+        return String.format(Locale.CHINA, "/shineecall/%s/13/%s/%s/sub",
+                mParameter.getDepartmentId(), mParameter.getRoomId(), mParameter.getMac());
+    }
+
+    /**
+     * 生产其他设备的订阅主题 如 床头屏 后台等
+     * @param device
+     * @return
+     */
+    private String getSubscriptionTopic(String device) {
+        return String.format(Locale.CHINA, device,
+                mParameter.getDepartmentId(), mParameter.getRoomId());
+    }
+
+    /**
+     * 生成门口屏发布的主题
+     * @return
+     */
+    private String getpublishTopic() {
+        return String.format(Locale.CHINA, "/shineecall/%s/13/%s/%s/pub",
+                mParameter.getDepartmentId(), mParameter.getRoomId(), mParameter.getMac());
     }
 
     /**
@@ -252,16 +165,17 @@ public class MQTTClient {
      */
     private MqttConnectOptions getMqttConnectOptions() {
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
-        mqttConnectOptions.setAutomaticReconnect(false);
+//        mqttConnectOptions.setAutomaticReconnect(false);
+        mqttConnectOptions.setAutomaticReconnect(true);
         mqttConnectOptions.setConnectionTimeout(30);
         mqttConnectOptions.setKeepAliveInterval(60);
         mqttConnectOptions.setCleanSession(true);
         mqttConnectOptions.setUserName(USER_NAME);
         mqttConnectOptions.setPassword(PASSWORD.toCharArray());
         //断开连接的主题
-        String topic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mClientId);
+        String topic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mParameter.getMac());
         //断开的消息
-        String payLoad = getDisconnectNotification(mHost, mClientId);
+        String payLoad = getDisconnectNotification(mParameter.getHost(), mParameter.getMac());
         mqttConnectOptions.setWill(topic, Base64.encode(payLoad.getBytes(), Base64.DEFAULT), mQos, mRetained);
         return mqttConnectOptions;
     }
@@ -295,20 +209,8 @@ public class MQTTClient {
                 return;
             }
             showDialog();
-            mHandler.removeCallbacks(mConnectRunnable);
-            mHandler.postDelayed(mConnectRunnable, 8000);
-        }
-    };
-
-    private Runnable mConnectRunnable = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                Log.d(TAG, "try to connect");
-                mqttAndroidClient.connect(getMqttConnectOptions(), null, mConnectListener);
-            } catch (MqttException ex) {
-                ex.printStackTrace();
-            }
+            //最终调用本类的connect（）方法
+//            mMessageProcessor.handleConnect(8000);
         }
     };
 
@@ -331,189 +233,14 @@ public class MQTTClient {
         public void connectionLost(Throwable cause) {
             Log.d(TAG, "The Connection was lost. " + mqttAndroidClient.isConnected());
             showDialog();
-            startConnect();
+//            mMessageProcessor.handleConnect(0);
         }
 
         @Override
         public void messageArrived(String topic, MqttMessage message) throws Exception {
             final String receive = new String(Base64.decode(message.getPayload(), Base64.DEFAULT));
             Log.d(TAG, "from topic:" + topic + "  Incoming message: " + receive);
-            final JSONObject jsonObject = new JSONObject(receive);
-            final String action = jsonObject.optString("action");
-            switch (action) {
-                case "getdoorscreeninfo":
-                    int department = jsonObject.optInt("department");
-                    int roomId = jsonObject.optInt("roomId");
-                    if (-1 == department || -1 == roomId) {
-                        return;
-                    }
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                final DoorScreenMessage doorScreenMessage = mGson.fromJson(receive, DoorScreenMessage.class);
-                                handleSubscribe(doorScreenMessage.getDepartment(), doorScreenMessage.getRoomId());
-                                synLocalTime(doorScreenMessage.getTime());
-                                updateDataBase(doorScreenMessage);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    });
-
-                    break;
-                //后台发来的转组通知
-                case "transferinsystem":
-                    try {
-                        Transfer transfer = mGson.fromJson(receive, Transfer.class);
-                        if (transfer != null) {
-                            handleTranfer(transfer.getDepartid(), transfer.getRoomid());
-                        }
-                    } catch (JsonSyntaxException | MqttException e) {
-                        e.printStackTrace();
-                    }
-                    break;
-                case "transfer":
-                    handleCallTransfer(receive, action, jsonObject);
-                    break;
-                //删除床位
-                case "deletefromsystem":
-                    handleDeleteFromSystem(jsonObject);
-                    break;
-                //添加更新床位
-                case "addedtosystem":
-                case "updatetosystem":
-                    handleAddOrUpdateToSystem(action, jsonObject);
-                    break;
-                case "watchtimeparam":
-                    VisitTime visitTime = mGson.fromJson(receive, VisitTime.class);
-                    mWard.setMorning(visitTime.getMorningwatchtime());
-                    mWard.setNoon(visitTime.getNoonwatchtime());
-                    mWard.setNight(visitTime.getNightwatchtime());
-                    mWardDataBase.ward().insert(mWard);
-                    break;
-
-                case "reinforcement":
-                case "service":
-                case "call":
-                case "position":
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            DoorLightHelper.DoorLightType doorLightType = getDoorLightType(action, jsonObject);
-                            //如果不是期望的类型返回为空
-                            if (null == doorLightType) {
-                                return;
-                            }
-
-                            notifyCallOnOff(true);
-//                            添加到门灯显示队列，由其根据优先级负责正确的显示
-                            mDoorLightHelper.put(doorLightType);
-//                            mDoorLightHelper.add(doorLightType);
-                            //获取队列的的所有提示消息
-                            mWard.setCallTip(mDoorLightHelper.getTips());
-                            mWardDataBase.ward().insert(mWard);
-                        }
-                    });
-                    break;
-                case "finish":
-                case "cancelposition":
-                case "acceptcall":
-                    mHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            DoorLightHelper.DoorLightType doorLightType = getDoorLightType(action, jsonObject);
-                            if (null == doorLightType) {
-                                return;
-                            }
-
-//                                从门灯队列移除一个，重新显示队列门灯
-                            mDoorLightHelper.remove(doorLightType);
-                            //获取提示
-                            mWard.setCallTip(mDoorLightHelper.getTips());
-                            mWardDataBase.ward().insert(mWard);
-                            //没有定位 或有其他呼叫
-                            if (mCallTransfer == null || 0 == mCallTransfer.getFlag()) {
-                                //没有呼叫
-                                if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
-//                                    通知关屏
-                                    notifyCallOnOff(false);
-                                }
-                            }
-                        }
-                    });
-
-                    break;
-                //目前仅开关屏时间
-                case "acceptscreenlight":
-                    handleScreenOnOff(receive);
-                    break;
-                case "acceptsystemvolume":
-                    if (13 == jsonObject.optInt("clienttype")) {
-                        handleVolumeSet(receive);
-                    }
-                    break;
-                case "reboot":
-                    //如果设备类型是门口屏
-                    if (13 == jsonObject.optInt("clienttype")) {
-                        DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.REBOOT, receive);
-                    }
-                    break;
-                //定时重启
-                case "accepttimedreboot":
-                    ReBoot reBoot = mGson.fromJson(receive, ReBoot.class);
-                    if (reBoot != null && 13 == reBoot.getClienttype()) {
-                        List<ReStart> datalist = reBoot.getDatalist();
-                        if (datalist != null && datalist.size() > 0) {
-                            mWardDataBase.reStartDao().insertAll(datalist);
-                            DoorService.startService(AppEntrance.getAppEntrance(), RESTART, "");
-                            /*if (mMqttListener != null) {
-                                mMqttListener.updateReStart();
-                            }*/
-                        }
-                    }
-                    break;
-                //后台重启上线后
-                case "connected":
-                    if ("server".equals(jsonObject.optString("sender"))) {
-                        Log.d(TAG, "connected");
-                        onConnectSucceed();
-                    }
-                    break;
-                //更新病房名称
-                case "updatename":
-                    String roomName = jsonObject.optString("roomname");
-                    if (!TextUtils.isEmpty(roomName)) {
-                        mWard.setRoomname(roomName);
-                        mWardDataBase.ward().insert(mWard);
-                    }
-                    break;
-                case "marqueeinfo":
-                    handleMarqueeInfo(receive);
-                    break;
-                //同步后台跑马灯列表，防止离线 换服务器时数据不同步
-                case "marqueelist":
-                    synMarqueeList(receive);
-                    break;
-                case "synpatient":
-                    handleSynPatient(receive);
-                    break;
-                case "workersinfo":
-                    handleSynStaff(receive);
-                    break;
-                case "missionlist":
-                    synVideoMissions(receive);
-                    break;
-                case "missioninfo":
-                    handleSingleVideoMission(receive);
-                    break;
-                case "submitinfusion":
-                    handleInfusion(receive, 1);
-                    break;
-                case "submitinfusionfinish":
-                    handleInfusion(receive, 2);
-                    break;
-            }
+            mMessageProcessor.handleMsg(receive);
         }
 
         @Override
@@ -522,603 +249,24 @@ public class MQTTClient {
         }
     };
 
-
-    /**
-     * @param receive
-     * @param type    1-添加  2-完成
-     */
-    private void handleInfusion(String receive, int type) {
-        try {
-            Infusion infusion = mGson.fromJson(receive, Infusion.class);
-            if (mDoorListener != null) {
-                mDoorListener.updateInfusion(infusion, type);
-            }
-//            mMqttListener.handleInfusion(infusion, type);
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 处理单个视频宣教信息  0_暂停，1_删除，2_发布宣教内容
-     * 类型是发布需要先下载，完成后再通知Frament更新数据 重新检索
-     * 暂停通知Fragment更新数据 重新检索
-     * 停止 删除文件后通知Fragment更新数据 重新检索
-     * 因为可能多个播单共享一个视频 ，删除后其他播单不能使用 所以相关Fragment添加播放列表时需要判断本地文件是否存在
-     * Mission 是用来统一单个播单和多个播单的封装类
-     * @param receive 后台发来的播单数据
-     */
-    private void handleSingleVideoMission(String receive) {
-        try {
-            MissionInfo missionInfo = mGson.fromJson(receive, MissionInfo.class);
-            int missionid = missionInfo.getMissionid();
-            int type=missionInfo.getType();
-            switch (missionInfo.getType()) {
-                case 0:
-                case 1:
-                    if (mMeidaListener != null) {
-                        mMeidaListener.invalidateMission(type,missionid);
-                    }
-                    break;
-                case 2:
-                    Mission mission = missionInfo.getData();
-                    mission.setMissionid(missionid);
-                    mission.setType(type);
-                    if (mMeidaListener != null) {
-                        mMeidaListener.handleNewMission(mission);
-                    }
-                    break;
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 与服务器同步本地宣教信息 在应用启动的时候，后台会发送
-     * 根据宣教播放时间段不同存储不同字段
-     * 存储的时间是决定播放的关键
-     *
-     * @param receive
-     */
-    private void synVideoMissions(String receive) {
-        try {
-            Missions missions = mGson.fromJson(receive, Missions.class);
-            List<Mission> missionList = missions.getData();
-            if (mMeidaListener != null) {
-                mMeidaListener.SynMissions(missionList);
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 处理音量设置
-     *
-     * @param json
-     */
-    private void handleVolumeSet(String json) {
-        try {
-            SystemInfo systemVolume = mGson.fromJson(json, SystemInfo.class);
-            if (systemVolume != null) {
-                List<SystemLight> list = systemVolume.getDatalist();
-                if (list != null && list.size() > 1) {
-                    //这个只用来获取晚上音量
-                    SystemLight volumeNight = list.get(0);
-                    //最后一个数据有白天，晚上的分割点，及音量
-                    SystemLight volumeDay = list.get(list.size() - 1);
-                    int mVolumeNight = volumeNight.getValue();
-                    int mVolumeDay = volumeDay.getValue();
-                    Log.d(TAG, "volumeNightValue:" + mVolumeNight + "volumeDayValue:" + mVolumeDay);
-                    int mVolumeDayHour = 0;
-                    int mVolumeDayMinute = 0;
-                    int mVolumeNightHour = 0;
-                    int mVolumeNightMinute = 0;
-
-                    String[] start = volumeDay.getStart().split(":");
-                    if (start.length > 1) {
-                        mVolumeDayHour = parseInt(start[0]);
-                        mVolumeDayMinute = parseInt(start[1]);
-                        Log.d(TAG, "volumeDayPoint:" + mVolumeDayHour + "-" + mVolumeDayMinute);
-                    }
-                    String[] end = volumeDay.getStop().split(":");
-                    if (end.length > 1) {
-                        mVolumeNightHour = parseInt(end[0]);
-                        mVolumeNightMinute = parseInt(end[1]);
-                        Log.d(TAG, "volumeNightPoint:" + mVolumeNightHour + "--" + mVolumeNightMinute);
-                    }
-                    VolumeManager.getInstance().saveVolumeParam(mVolumeDay, mVolumeNight, mVolumeDayHour, mVolumeDayMinute,
-                            mVolumeNightHour, mVolumeNightMinute);
-                    DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.VOLUME_SWITCH, "");
-
-                }
-            }
-
-        } catch (JsonSyntaxException | NumberFormatException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //通知后台呼叫状态，方便调整开关屏
-    private void notifyCallOnOff(boolean callOn) {
-        if (callOn) {
-            DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.CALL_ON, "");
-        } else {
-            DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.CALL_OFF, "");
-        }
-    }
-
-    /**
-     * 处理开关屏
-     *
-     * @param receive
-     */
-    private void handleScreenOnOff(String receive) {
-        try {
-            SystemInfo systemInfo = mGson.fromJson(receive, SystemInfo.class);
-            //13表示类型是门口屏，其他类型不处理
-            if (systemInfo != null && 13 == systemInfo.getClienttype()) {
-                List<SystemLight> datalist = systemInfo.getDatalist();
-                if (datalist != null && datalist.size() > 0) {
-                    //最后一个数据是有用的，其他无用
-                    SystemLight lightParam = datalist.get(datalist.size() - 1);
-                    String[] start = lightParam.getStart().split(":");
-                    int openScreenHour = 0;
-                    int openScreenMinute = 0;
-                    int closeScreenHour = 0;
-                    int closeScreenMinute = 0;
-                    if (start.length > 1) {
-                        openScreenHour = parseInt(start[0]);
-                        openScreenMinute = parseInt(start[1]);
-                    }
-                    String[] end = lightParam.getStop().split(":");
-                    if (end.length > 1) {
-                        closeScreenHour = parseInt(end[0]);
-                        closeScreenMinute = parseInt(end[1]);
-                    }
-                    //保存到本地
-                    ScreenManager.getInstance()
-                            .saveScreenOnOffParams(openScreenHour, openScreenMinute, closeScreenHour, closeScreenMinute, lightParam.getValue());
-//                    String json = mGson.toJson(lightParam);
-                    //通知后台更新
-                    DoorService.startService(AppEntrance.getAppEntrance(), MainActivity.SCREEN_SWITCH, "");
-                }
-            }
-        } catch (JsonSyntaxException | NumberFormatException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 处理呼叫转移，交由MainActivy处理对话框显示
-     * 显示定位对话框
-     *
-     * @param receive    flag=1 显示呼叫转移对话框  flag=0 取消
-     *                   手动点击对话框的取消 要发送取消命令
-     * @param action
-     * @param jsonObject
-     */
-    private void handleCallTransfer(String receive, String action, JSONObject jsonObject) {
-        try {
-            mCallTransfer = mGson.fromJson(receive, CallTransfer.class);
-            if (mCallTransfer != null) {
-                mMqttListener.handleCallTransfer(mCallTransfer.getDestinationname(), mCallTransfer.getFlag() != 0);
-                //如果存在其他呼叫增援等状态时，就不需要关心开关屏，否则开关屏与显示对话框同步
-                if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
-                    notifyCallOnOff(mCallTransfer.getFlag() != 0);
-                }
-                DoorLightHelper.DoorLightType doorLightType = getDoorLightType(action, jsonObject);
-                //如果不是期望的类型返回为空
-                if (null == doorLightType) {
-                    return;
-                }
-                Log.d(TAG, "handleCallTransfer " + doorLightType.toString());
-
-                //显示呼叫转移，显示之前会取消之前的呼叫
-                if (mCallTransfer.getFlag() == 1) {
-//                    mDoorLightHelper.add(doorLightType);
-                    mDoorLightHelper.put(doorLightType);
-                } else {
-//                    取消呼叫转移
-//                    mDoorLightHelper.remove(doorLightType);
-                    mDoorLightHelper.removeCallTransfer();
-                }
-                //获取队列的的所有提示消息
-                mWard.setCallTip(mDoorLightHelper.getTips());
-                mWardDataBase.ward().insert(mWard);
-
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
     /**
      * 取消呼叫转移
      */
     public void handleCancelCallTransfer() {
-        if (mCallTransfer != null) {
-            mCallTransfer.setFlag(0);
-            mCallTransfer.setSender("station");
-            String message = mGson.toJson(mCallTransfer);
-            Log.d(TAG, "cancle call transfer" + message);
-            publishMessage(message, String.format(Locale.CHINA, "/shineecall/%s/broadcast", mDepartmentId));
-            //如果存在其他呼叫增援等状态时，就不需要关心开关屏，否则开关屏与显示对话框同步
-            if (mDoorLightHelper.getDoorLightTypes().size() == 0) {
-                notifyCallOnOff(false);
-            }
-
-        }
-    }
-
-    //处理医护信息的更新
-    private void handleSynStaff(String receive) {
-        Log.d(TAG, "handleSynStaff() called with: receive ");
-        try {
-            SynStaff synStaff = mGson.fromJson(receive, SynStaff.class);
-            if (synStaff != null) {
-                List<Doctor> doctorlist = synStaff.getDoctorlist();
-                List<Nurse> nurselist = synStaff.getNurselist();
-                updateStaff(doctorlist, nurselist);
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    //处理病室患者信息的更新
-    private void handleSynPatient(String receive) {
-        try {
-            SynPatient synPatient = mGson.fromJson(receive, SynPatient.class);
-            if (synPatient != null) {
-                SynPatient.DataBean data = synPatient.getData();
-                Patient patient = null;
-                if (data != null) {
-//                    0_修改，1_删除，2_增加
-                    switch (data.getType()) {
-                        //删除病人信息，但保留床位
-                        case 1:
-                            patient = new Patient(data.getDevicemac());
-                            patient.setBedno(data.getBednum());
-                            break;
-                        case 0:
-                        case 2:
-                            patient = new Patient(data.getUsername(), data.getBednum(),
-                                    data.getDoctorname(), data.getDevicemac(), false);
-                            break;
-                        default:
-                            Log.d(TAG, "unkown opertaion");
-
-                    }
-                    if (patient != null && !TextUtils.isEmpty(patient.getClientmac())) {
-                        mWardDataBase.patient().replace(patient);
-                    }
-                }
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //处理单个跑马灯，新建一个跑马灯和更新一个是不能区分的
-    private void handleMarqueeInfo(String receive) {
-        try {
-            MarqueeInfo marqueeInfo = mGson.fromJson(receive, MarqueeInfo.class);
-            if (marqueeInfo != null) {
-                switch (marqueeInfo.getType()) {
-                    //停止没有开启方法，和删除是同一个意思
-                    case 0:
-                    case 1:
-                        mWardDataBase.marqueeDao().stopMarquee(marqueeInfo.getMarqueeid());
-                        if (mDoorListener != null) {
-                            mDoorListener.onMarqueeUpdate();
-                        }
-                        break;
-                    //更新跑马灯
-                    case 2:
-                        updateSingleMarquee(marqueeInfo);
-                        break;
-                }
-
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //更新单个跑马灯
-    private void updateSingleMarquee(MarqueeInfo marqueeInfo) {
-        Marquee marquee = marqueeInfo.getData();
-        if (marquee != null) {
-            marquee.setMarqueeid(marqueeInfo.getMarqueeid());
-            List<MarqueeTime> playTime = marquee.getPlaytimes();
-            if (playTime == null || playTime.size() == 0) {
-                return;
-            }
-            for (MarqueeTime time : playTime) {
-                if (time == null) {
-                    continue;
-                }
-                time.setMarqueeid(marquee.getMarqueeid());
-            }
-            try {
-                mWardDataBase.beginTransaction();
-//                插入最新的信息，相同的会替换
-                mWardDataBase.marqueeDao().insertMarquee(marquee);
-//                删除旧跑马灯的时间表 重新插入
-                mWardDataBase.marqueeTimeDao().deleteMarqueeTime(marquee.getMarqueeid());
-                mWardDataBase.marqueeTimeDao().insertAll(playTime);
-                mWardDataBase.setTransactionSuccessful();
-            } finally {
-                mWardDataBase.endTransaction();
-            }
-            if (mDoorListener != null) {
-                mDoorListener.onMarqueeUpdate();
-            }
-        }
-    }
-
-    //同步后台跑马灯列表，防止离线 换服务器时数据不同步
-    private void synMarqueeList(String receive) {
-        Log.d(TAG, "synMarqueeList");
-        try {
-            MarqueeList marqueeList = mGson.fromJson(receive, MarqueeList.class);
-            //先清空数据库
-            mWardDataBase.beginTransaction();
-//            会级联删除
-            mWardDataBase.marqueeDao().deleteAllMarquees();
-            if (marqueeList != null) {
-                List<Marquee> marquees = marqueeList.getData();
-                //先插入所有跑马灯信息
-                mWardDataBase.marqueeDao().insertAll(marquees);
-                for (Marquee marquee : marquees) {
-                    List<MarqueeTime> playtimes = marquee.getPlaytimes();
-                    for (MarqueeTime playtime : playtimes) {
-                        playtime.setMarqueeid(marquee.getMarqueeid());
-                    }
-//                    为每个跑马灯插入时刻表数据
-                    mWardDataBase.marqueeTimeDao().insertAll(playtimes);
-                }
-                mWardDataBase.setTransactionSuccessful();
-            }
-            if (mDoorListener != null) {
-                mDoorListener.onMarqueeUpdate();
-            }
-           /* if (mMqttListener != null) {
-                mMqttListener.onMarqueeUpdate();
-            }*/
-
-
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        } finally {
-            mWardDataBase.endTransaction();
-        }
-
-    }
-
-       /**
-     * 如果从后台删除门口屏
-     * 清空数据库内容,UI会自动更新
-     * 重新请求数据，方便后台重新添加
-     */
-    private void handleDeleteFromSystem(JSONObject jsonObject) {
-        int clienttype = jsonObject.optInt("clienttype");
-        String clientmac = jsonObject.optString("clientmac");
-        //删除床头屏
-        if (1 == clienttype) {
-            if ("platform".equals(jsonObject.optString("sender"))) {
-                Patient patient = new Patient(clientmac);
-                //根据mac删除
-                mWardDataBase.patient().delete(patient);
-            }
-        } else if (13 == clienttype && mClientId.equals(clientmac)) {
-            //删除门口屏相关数据，UI在监听会自动更新
-            mWardDataBase.patient().deleteAll();
-            mWardDataBase.staff().deleteAll();
-            mWardDataBase.ward().deleteAll();
-            //UI没监听，需要通知
-            mWardDataBase.reStartDao().deleteAll();
-//            此时仅仅取消关机设置
-            DoorService.startService(AppEntrance.getAppEntrance(), RESTART, "");
-           /* if (mMqttListener != null) {
-                mMqttListener.updateReStart();
-            }*/
-            onConnectSucceed();
-        }
-    }
-
-    /**
-     * 添加更新床位
-     *
-     * @param jsonObject
-     */
-    private void handleAddOrUpdateToSystem(String action, JSONObject jsonObject) {
-        int clienttype = jsonObject.optInt("clienttype");
-        String clientmac = jsonObject.optString("clientmac");
-        if (1 == clienttype) {
-            if ("platform".equals(jsonObject.optString("sender"))) {
-                String bedno = jsonObject.optString("clientname");
-                //区别对待添加和更新，否则更新的时候会覆盖患者信息
-                if ("addedtosystem".equals(action)) {
-                    Patient patient = new Patient(clientmac);
-                    patient.setBedno(bedno);
-                    mWardDataBase.patient().replace(patient);
-                } else if ("updatetosystem".equals(action)) {
-                    mWardDataBase.patient().update(bedno, clientmac);
-                }
-            }
-        } else if (13 == clienttype) {
-            onConnectSucceed();
-        }
-    }
-
-    /**
-     * 与后台服务器时间同步
-     *
-     * @param time
-     */
-    private void synLocalTime(long time) {
-        if (Math.abs(System.currentTimeMillis() - time) > 3 * 1000) {
-            if (time > 0 && time / 1000 < Integer.MAX_VALUE) {
-                ((AlarmManager) AppEntrance.getAppEntrance().getSystemService(Context.ALARM_SERVICE)).setTime(time);
-                boolean result = new RootCommand().checkTime();
-                Log.d(TAG, "syn local time result:" + result);
-                if (mDoorListener != null) {
-                    mDoorListener.onSynSucceed();
-                }
-            }
-        }
-    }
-
-    /**
-     * Incoming message: {"destinationname":"1床","destinationmac":"E06417180956","destinationip":"","action":"transfer","stationip":"172.168.32.114","stationmac":"E06420173214","sender":"station","flag":0}
-     *
-     * @param action     其他设备发出的服务类型，如 增援，呼叫，输液提醒
-     * @param jsonObject 判读优先级，具体设备的数据
-     * @return
-     */
-    private DoorLightHelper.DoorLightType getDoorLightType(String action, final JSONObject jsonObject) {
-        DoorLightHelper.DoorLightType doorLightType = new DoorLightHelper.DoorLightType();
-        String sender = jsonObject.optString("sender");
-        //护士站对应科室下所有门口屏，门口屏对应病房，判断消息针对本病房的门口屏
-        if ("station".equals(sender)) {
-            JSONObject data = jsonObject.optJSONObject("data");
-            if (data != null) {
-                String roomid = data.optString("roomid");
-                Log.d(TAG, "roomid " + roomid);
-                //如果护士站发来的消息不是本病房的， 忽略
-                if (!mRoomId.equals(roomid)) {
-                    return null;
-                }
-                //呼叫转移的时候，不处理护士站的呼叫
-                if ("call".equals(action)) {
-                    return null;
-                }
-            }
-        }
-        String clientmac = jsonObject.optString("clientmac");
-        String clientname = jsonObject.optString("clientname");
-        //如果是护士站发来的呼叫转移，需要获取destinationmac，而不是clientmac
-        if ("station".equals(sender) && "transfer".equals(action)) {
-            clientmac = jsonObject.optString("destinationmac");
-        }
-        doorLightType.setClientmac(clientmac);
-        switch (action) {
-            //增援
-            case "reinforcement":
-                doorLightType.setPriority(1);
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_orange));
-                doorLightType.setTip(clientname + "请求增援");
-                break;
-            case "service":
-                doorLightType.setPriority(2);
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_green));
-                doorLightType.setTip(clientname + "请求服务");
-                break;
-            case "call":
-                doorLightType.setPriority(3);
-                doorLightType.setCurrentTime(System.currentTimeMillis());
-                doorLightType.setTip(clientname + "正在呼叫");
-                if ("screen".equals(sender)) {
-                    doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_red));
-                } else if ("bathroom".equals(sender)) {
-                    doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_blue));
-                }
-                break;
-//            case "position":
-//                呼叫转移
-            case "transfer":
-                doorLightType.setPriority(4);
-                doorLightType.setCurrentTime(System.currentTimeMillis());
-                doorLightType.setInstruction(AppEntrance.getAppEntrance().getResources().getString(R.string.long_green));
-                doorLightType.setTip(clientname + "呼叫转移");
-                break;
-            case "cancelposition":
-            case "finish":
-            case "acceptcall":
-                //根据Mac地址移除门灯指令
-                break;
-        }
-
-        return doorLightType;
-    }
-
-
-    /**
-     * 更新数据库信息
-     *
-     * @param message
-     * @throws Exception
-     */
-    private void updateDataBase(DoorScreenMessage message) throws Exception {
-        mWardDataBase.patient().deleteAll();
-        List<Patient> patientlist = message.getPatientlist();
-        for (Patient patient : patientlist) {
-            //床号长度超过4，比如233+床就换行显示床
-            if (patient.getBedno().length() > 4) {
-                String result = patient.getBedno().replace("床", "\n床");
-                patient.setBedno(result);
-            }
-            //使用正则提取第一个数字字符串,转化成数字用来排序，没有数字就是-1
-            int bedNum = Common.getNumbers(patient.getBedno());
-            patient.setBedNum(bedNum);
-
-        }
-        mWardDataBase.patient().insertAll(patientlist);
-
-        updateStaff(message.getDoctorlist(), message.getNurselist());
-
-        //病房信息，拼凑而成
-        WatchTime watchtime = message.getWatchtime();
-        mWard.setDepartment(message.getDepartment());
-        mWard.setRoomId(message.getRoomId());
-        mWard.setRoomname(message.getRoomname());
-        mWard.setMorning(watchtime.getMorning());
-        mWard.setNoon(watchtime.getNoon());
-        mWard.setNight(watchtime.getNight());
-        mWardDataBase.ward().insert(mWard);
-    }
-
-    /**
-     * 更新医护信息，本病房下所有医护信息
-     * 不同于患者，医护信息更新是整体的，病人可以单个修改
-     * 先清空表，再重新插入最新的所有数据
-     *
-     * @param doctorlist
-     * @param nurselist
-     */
-    private void updateStaff(List<Doctor> doctorlist, List<Nurse> nurselist) {
-        List<Staff> staffs = new ArrayList<>();
-        if (doctorlist != null) {
-            staffs.addAll(doctorlist);
-        }
-        if (nurselist != null) {
-            staffs.addAll(nurselist);
-        }
-
-        mWardDataBase.staff().deleteAll();
-        if (staffs.size() != 0) {
-            mWardDataBase.staff().insertAll(staffs);
-        }
+        String topic = String.format(Locale.CHINA, "/shineecall/%s/broadcast", mParameter.getDepartmentId());
+        mMessageProcessor.handleCancelCallTransfer(topic);
     }
 
     /**
      * 没连上或与服务器断线的时候显示对话框
      */
-    public void showDialog() {
-        if (mMqttListener != null) {
-            mMqttListener.handleOutOfInternet();
-        }
+    private void showDialog() {
+        MainActivity.sendUpdate(INTERNET_OUT);
     }
 
 
     private void dismissDialog() {
-        if (mMqttListener != null) {
-            mMqttListener.handleInternetRecovery();
-        }
+        MainActivity.sendUpdate(INTERNET_RECOVERY);
     }
 
 
@@ -1126,7 +274,7 @@ public class MQTTClient {
      * 订阅主题
      *
      * @param subscriptionTopic 所需要订阅的主题，字符串形式
-     * @param needPublish       是否需要发布消息
+     * @param needPublish       是否需要发布消息 只有在订阅门口屏信息成功时才为true
      */
     private void subscribeToTopic(final String subscriptionTopic, final boolean needPublish) {
         try {
@@ -1136,9 +284,9 @@ public class MQTTClient {
                     Log.d(TAG, "subscribeToTopic:" + subscriptionTopic);
                     if (needPublish) {
                         //获取门口屏信息
-                        Message message = new Message("getdoorscreeninfo", mClientId, mHost);
+                        Message message = new Message("getdoorscreeninfo", mParameter.getMac(), mParameter.getHost());
                         String getDoorScreenInfo = mGson.toJson(message);
-                        String publishTopic = getpublishTopic(mDepartmentId, mRoomId, mClientId);
+                        String publishTopic = getpublishTopic();
                         publishMessage(getDoorScreenInfo, publishTopic);
                     }
                 }
@@ -1159,7 +307,7 @@ public class MQTTClient {
      * @param publishMessage 要发布的信息
      * @param publishTopic   要发布的主题
      */
-    private void publishMessage(String publishMessage, String publishTopic) {
+    void publishMessage(String publishMessage, String publishTopic) {
         try {
             mqttAndroidClient.publish(publishTopic,
                     Base64.encode(publishMessage.getBytes(), android.util.Base64.DEFAULT), mQos, mRetained);
@@ -1177,12 +325,12 @@ public class MQTTClient {
     /**
      * 与服务器连接成功的处理
      */
-    private void onConnectSucceed() {
+    void onConnectSucceed() {
         Log.d(TAG, "Connect onSuccess");
         mqttAndroidClient.setBufferOpts(getBufferOpt());
         //连接成功后订阅主题,由于此时还不知道科室id和房间id，使用通配符+,
         // 当获取到门口屏具体信息，需要取消此主题，重新订阅,否则就重复订阅，收到重复数据
-        String topicForDoorSceen = getSubscriptionTopic("+", "+", mClientId);
+        String topicForDoorSceen = getSubscriptionTopic("+", "+", mParameter.getMac());
         //用于取消通配符订阅
         subscriptionTopic = topicForDoorSceen;
         //true表示订阅成功后发布主题
@@ -1191,26 +339,23 @@ public class MQTTClient {
         //业务服务器死亡/上线通知，如果MQTT重启，此设备先于业务服务器连接，就收不到最新数据
         //所以必须提前订阅业务服务器的上线通知，更新数据,不取消订阅
         subscribeToTopic("/shineecall/callserver/broadcast", false);
-//        mTopicSubscribed.add("/shineecall/callserver/broadcast");
     }
 
     //获取门口屏信息
     private void getDoorScreenInfo() {
-        Message message = new Message("getdoorscreeninfo", mClientId, mHost);
+        Message message = new Message("getdoorscreeninfo", mParameter.getMac(), mParameter.getHost());
         String getDoorScreenInfo = mGson.toJson(message);
-        String publishTopic = getpublishTopic(mDepartmentId, mRoomId, mClientId);
+        String publishTopic = getpublishTopic();
         publishMessage(getDoorScreenInfo, publishTopic);
     }
 
     /**
      * 处理转组
      */
-    public void handleTranfer(String departmentId, String roomId) throws MqttException {
-        mDepartmentId = departmentId;
-        mRoomId = roomId;
+    void handleTranfer() throws MqttException {
         //取消之前的订阅
         unSubscribe();
-        String topForDoorScreen = getSubscriptionTopic(mDepartmentId, mRoomId, mClientId);
+        String topForDoorScreen = getSubscriptionTopic();
         //重新订阅，并发布消息
         subscribeToTopic(topForDoorScreen, true);
     }
@@ -1219,10 +364,8 @@ public class MQTTClient {
      * 护士站，床头屏，卫生间和门口屏都是通过科室和房间号关联的
      * 当接收到门口屏科室和房间号后开始订阅护士站，床头屏，卫生间的动态
      */
-    private void handleSubscribe(String departmentId, String roomId) throws MqttException {
+    void handleSubscribe() throws MqttException {
         mqttAndroidClient.unsubscribe(subscriptionTopic);
-        mDepartmentId = departmentId;
-        mRoomId = roomId;
         subscirbe();
     }
 
@@ -1230,35 +373,38 @@ public class MQTTClient {
      * 订阅需要的数据：门口屏的，床头屏的等等
      * 在获取到准确的房间号，或断线重连使用
      */
-    private void subscirbe() {
+   private void subscirbe() {
         //门口屏接收数据
-        String topForDoorScreen = getSubscriptionTopic(mDepartmentId, mRoomId, mClientId);
+        String topForDoorScreen = getSubscriptionTopic();
         subscribeToTopic(topForDoorScreen, false);
         mTopicSubscribed.add(topForDoorScreen);
 
         //床头屏发布数据 （所在病房所有床头屏）
-        String bedScreen = String.format(Locale.CHINA, "/shineecall/%s/1/%s/+/pub", mDepartmentId, mRoomId);
+//        String bedScreen = String.format(Locale.CHINA, "/shineecall/%s/1/%s/+/pub", mDepartmentId, mRoomId);
+        String bedScreen = getSubscriptionTopic("/shineecall/%s/1/%s/+/pub");
         subscribeToTopic(bedScreen, false);
         mTopicSubscribed.add(bedScreen);
 
         //所在科室所有护士站
-        String nurseStation = String.format(Locale.CHINA, "/shineecall/%s/2/+/broadcast", mDepartmentId);
+        String nurseStation = String.format(Locale.CHINA, "/shineecall/%s/2/+/broadcast", mParameter.getDepartmentId());
         subscribeToTopic(nurseStation, false);
         mTopicSubscribed.add(nurseStation);
 
 
         //卫生间发布数据 （所在病房所有卫生间）
-        String washRoom = String.format(Locale.CHINA, "/shineecall/%s/7/%s/+/pub", mDepartmentId, mRoomId);
+        String washRoom = getSubscriptionTopic("/shineecall/%s/7/%s/+/pub");
+//        String washRoom = String.format(Locale.CHINA, "/shineecall/%s/7/%s/+/pub", mDepartmentId, mRoomId);
         subscribeToTopic(washRoom, false);
         mTopicSubscribed.add(washRoom);
 
         //管理后台发布的对病房的数据
-        String platform = String.format(Locale.CHINA, "/shineecall/%s/%s/broadcast", mDepartmentId, mRoomId);
+//        String platform = String.format(Locale.CHINA, "/shineecall/%s/%s/broadcast", mDepartmentId, mRoomId);
+        String platform =getSubscriptionTopic("/shineecall/%s/%s/broadcast");
         subscribeToTopic(platform, false);
         mTopicSubscribed.add(platform);
 
         //呼叫转移
-        String transfer = String.format(Locale.CHINA, "/shineecall/%s/broadcast", mDepartmentId);
+        String transfer = String.format(Locale.CHINA, "/shineecall/%s/broadcast", mParameter.getDepartmentId());
         subscribeToTopic(transfer, false);
         mTopicSubscribed.add(transfer);
 
@@ -1266,9 +412,9 @@ public class MQTTClient {
         subscribeToTopic("/shineecall/system/broadcast", false);
 
         //通知后台设备已连接
-        Message message = new Message("connected", mClientId, mHost);
+        Message message = new Message("connected", mParameter.getMac(), mParameter.getHost());
         String deviceConnected = mGson.toJson(message);
-        String publishTopic = getpublishTopic(mDepartmentId, mRoomId, mClientId);
+        String publishTopic = getpublishTopic();
         publishMessage(deviceConnected, publishTopic);
     }
 
@@ -1300,15 +446,8 @@ public class MQTTClient {
         }
     }
 
-    private void finishHanderThread() {
-        if (mHandlerThread != null) {
-            mHandlerThread.quitSafely();
-            mHandlerThread = null;
-        }
-        if (mHandler != null) {
-            mHandler.removeCallbacksAndMessages(null);
-            mHandler = null;
-        }
+    LocalParameter getParameter() {
+        return mParameter;
     }
 
     private void exitMqtt() {
@@ -1316,13 +455,16 @@ public class MQTTClient {
         if (mqttAndroidClient != null) {
             try {
                 mqttAndroidClient.setCallback(null);
-                String publishMessage = getDisconnectNotification(mHost, mClientId);
-                String publishTopic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mClientId);
+                String publishMessage = getDisconnectNotification(mParameter.getHost(), mParameter.getMac());
+                String publishTopic = String.format(Locale.CHINA, "/shineecall/%s/disconnect", mParameter.getMac());
                 //断开之前发布通知
                 publishMessage(publishMessage, publishTopic);
                 //取消之前的订阅
                 unSubscribe();
-                mqttAndroidClient.disconnect();
+//                mqttAndroidClient.disconnect();
+                mqttAndroidClient.close();
+                mqttAndroidClient.unregisterResources();
+                mqttAndroidClient=null;
             } catch (MqttException e) {
                 Log.d(TAG, "exit exception:" + e);
                 e.printStackTrace();
@@ -1334,56 +476,14 @@ public class MQTTClient {
      * 退出程序时调用
      */
     public void exit() {
-        removeAllListener();
+        Log.d(TAG, "exit: ");
         dismissDialog();
-        mDoorLightHelper.exit();
-        finishHanderThread();
         exitMqtt();
-
+        mMessageProcessor.stop();
+        mMessageProcessor=null;
+//        释放此单例
+        sMQTTClient=null;
 
     }
-
-    //    主页相关监听
-    public void setMqttListner(MainActivity.MqttListener mqttListener) {
-        mMqttListener = mqttListener;
-    }
-
-    //    门口屏信息的监听
-    public void setDoorFragmentListener(DoorFragment.OnFragmentInteractionListener interactionListener) {
-        mDoorListener = interactionListener;
-    }
-
-    public void removeDoorFragmentListener() {
-        if (mDoorListener != null) {
-            mDoorListener = null;
-        }
-    }
-    //多媒体页面监听
-    public void setMeidaListener(MediaFragment.OnMutilMediaListener meidaListener) {
-        mMeidaListener = meidaListener;
-    }
-
-    public void removeMeidaListener() {
-        if (mMeidaListener != null) {
-            mMeidaListener=null;
-        }
-    }
-
-    public void removeMqttListener() {
-        if (mMqttListener != null) {
-            mMqttListener = null;
-        }
-    }
-
-
-    private void removeAllListener() {
-        if (mMqttListener != null) {
-            mMqttListener = null;
-        }
-        if (mDoorListener != null) {
-            mDoorListener = null;
-        }
-    }
-
 
 }

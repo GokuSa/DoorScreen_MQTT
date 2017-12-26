@@ -14,7 +14,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import shine.com.doorscreen.mqtt.bean.Staff;
+import shine.com.doorscreen.entity.Staff;
 
 @Dao
 public interface StaffDao {

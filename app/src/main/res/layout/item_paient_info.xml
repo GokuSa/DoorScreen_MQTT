@@ -4,7 +4,7 @@
     <data>
         <variable
             name="patient"
-            type="shine.com.doorscreen.mqtt.bean.Patient"/>
+            type="shine.com.doorscreen.entity.Patient"/>
     </data>
     <LinearLayout
         android:layout_width="wrap_content"

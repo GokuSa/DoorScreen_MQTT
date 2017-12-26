@@ -1,10 +1,6 @@
 package shine.com.doorscreen.fragment;
 
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.databinding.DataBindingUtil;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -14,7 +10,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
-import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
@@ -27,6 +22,8 @@ import android.widget.VideoView;
 import android.widget.ViewSwitcher;
 
 import com.bumptech.glide.Glide;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -37,12 +34,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.activity.MainActivity;
-import shine.com.doorscreen.app.AppEntrance;
 import shine.com.doorscreen.databinding.FragmentMediaBinding;
 import shine.com.doorscreen.entity.Element;
 import shine.com.doorscreen.entity.Mission;
+import shine.com.doorscreen.entity.MissionInfo;
+import shine.com.doorscreen.entity.Missions;
 import shine.com.doorscreen.entity.PlayTime;
-import shine.com.doorscreen.mqtt.MQTTClient;
 import shine.com.doorscreen.service.DownLoadService;
 import shine.com.doorscreen.util.DateFormatManager;
 
@@ -53,8 +50,6 @@ import shine.com.doorscreen.util.DateFormatManager;
  */
 public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionListener, MediaPlayer.OnErrorListener, ViewSwitcher.ViewFactory {
     private static final String TAG = "MediaFragment";
-    //宣教信息下載廣播action
-    private static final String MEDIA_ACTION = "com.action.media";
     //视频和图片目录
     private File mFileMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
     private File mFilePicture = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
@@ -103,6 +98,10 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
             mReference = new WeakReference<>(mediaFragment);
         }
 
+        public void invalidate() {
+            mReference.clear();
+        }
+
         @Override
         public void handleMessage(Message msg) {
             MediaFragment mediaFragment = mReference.get();
@@ -116,23 +115,8 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
                 case MSG_NEXT:
                     mediaFragment.next();
                     break;
-                case MSG_RESCHEDULE:
-                    mediaFragment.scheduleMutilMedia();
-                    sendEmptyMessageDelayed(MSG_RESCHEDULE, 24 * 60 * 60 * 1000);
-                    break;
             }
         }
-    }
-
-    /**
-     *
-     * 发送给此页面的广播Intent
-     *
-     */
-    public static void notifyUpdate() {
-        Intent intent = new Intent(MediaFragment.MEDIA_ACTION);
-        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).sendBroadcast(intent);
-
     }
 
     /*图片到视频的切换*/
@@ -177,9 +161,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
         isPrepared = true;
         mDateFormatManager = new DateFormatManager();
         mHandler = new MainHandler(this);
-        mMissions=new SparseArray<>();
-        MQTTClient.INSTANCE().setMeidaListener(mMediaListener);
-        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).registerReceiver(mReceiver, new IntentFilter(MEDIA_ACTION));
+        mMissions = new SparseArray<>();
 
         // TODO: 2017/12/19 没网10秒后 自己检索（没有数据库不行）
     }
@@ -215,8 +197,9 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        MQTTClient.INSTANCE().removeMeidaListener();
-        LocalBroadcastManager.getInstance(AppEntrance.getAppEntrance()).unregisterReceiver(mReceiver);
+        mHandler.invalidate();
+        mHandler.removeCallbacksAndMessages(null);
+
         Log.d(TAG, "onDestroyView: ");
     }
 
@@ -245,7 +228,6 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
             mHandler.removeMessages(MainHandler.MSG_NEXT);
         }
     }
-
 
 
     /**
@@ -380,32 +362,24 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
         return true;
     }
 
-    //宣教信息的接受監聽
-    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            //下载完成通知
-            Log.d(TAG, "onReceive:scheduleMutilMedia");
-            scheduleMutilMedia();
-        }
-    };
+
     /**
      * 安排多媒体播放  如果检索到本地有在当前时间段播放的多媒体会请求Activity切换
      * 先从多媒体日期表获取符合条件的播单id，在根据时间表安排播放时间
      * 1.获取符合条件的播放列表
      * 2.安排下一次更新
      */
-    private void scheduleMutilMedia() {
+    public void scheduleMutilMedia() {
         Log.d(TAG, "scheduleMutilMedia: ");
         mHandler.removeCallbacksAndMessages(null);
         //安排明天凌晨的更新
-        mHandler.sendEmptyMessageDelayed(MainHandler.MSG_RESCHEDULE, mDateFormatManager.millisToWeeHour());
+//        mHandler.sendEmptyMessageDelayed(MainHandler.MSG_RESCHEDULE, mDateFormatManager.millisToWeeHour());
         List<Element> playList = new ArrayList<>();
-        for (int i = 0,size=mMissions.size(); i < size; i++) {
+        for (int i = 0, size = mMissions.size(); i < size; i++) {
             Mission mission = mMissions.valueAt(i);
-            Log.d(TAG,"mission "+ mission.toString());
+            Log.d(TAG, "mission " + mission.toString());
 //            当前播单是否在播放日期内,并且是发布状态
-            if (mDateFormatManager.isMeidaDateBetween(mission.getStartdate(), mission.getStopdate())&&mission.getType()==2) {
+            if (mDateFormatManager.isMeidaDateBetween(mission.getStartdate(), mission.getStopdate()) && mission.getType() == 2) {
                 Log.d(TAG, "date pass");
                 List<PlayTime> playtimes = mission.getPlaytimes();
                 for (PlayTime playtime : playtimes) {
@@ -440,6 +414,7 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
 
     /**
      * 更新播放列表
+     *
      * @param elements
      */
     private void updatePlayList(List<Element> elements) {
@@ -451,137 +426,133 @@ public class MediaFragment extends Fragment implements MediaPlayer.OnCompletionL
         mImagePath.clear();
         for (Element mutilMedia : elements) {
             if (mutilMedia.getType() == 1) {
-                File file = new File(mFileMovies.getAbsolutePath(),mutilMedia.getName());
+                File file = new File(mFileMovies.getAbsolutePath(), mutilMedia.getName());
                 //播单可能会有重复的素材，不重复加
                 if (file.exists()) {
                     mVideoPath.addIfAbsent(file);
                 }
             } else if (mutilMedia.getType() == 2) {
-                File file = new File(mFilePicture.getAbsolutePath(),mutilMedia.getName());
+                File file = new File(mFilePicture.getAbsolutePath(), mutilMedia.getName());
                 if (file.exists()) {
                     mImagePath.addIfAbsent(file);
                 }
             }
         }
-        Log.d(TAG, "video"+mVideoPath.toString());
-        Log.d(TAG, "image "+mImagePath.toString());
+        Log.d(TAG, "video" + mVideoPath.toString());
+        Log.d(TAG, "image " + mImagePath.toString());
         MainActivity activity = (MainActivity) getActivity();
-        boolean canPlay=mVideoPath.size() > 0 || mImagePath.size() > 0;
+        boolean canPlay = mVideoPath.size() > 0 || mImagePath.size() > 0;
         //可见
-        if (isVisible&&canPlay) {
+        if (isVisible && canPlay) {
             playMedia();
-        }else if(isVisible&&!canPlay){
+        } else if (isVisible && !canPlay) {
 //            可见 不能播 切换
             activity.requestPlayMedia(false);
         } else if (!isVisible && canPlay) {
 //            不可见 能播
             activity.requestPlayMedia(true);
-        }else{
+        } else {
             Log.d(TAG, "不可见 不能播");
         }
 
     }
 
-    private OnMutilMediaListener mMediaListener=new OnMutilMediaListener() {
-        @Override
-        public void invalidateMission(int type, int missionId) {
-            //type 0 停止  1-删除 删除之前必须先停止
-            Mission mission = mMissions.get(missionId);
-            Log.d(TAG, "mission:" + mission);
-            if (mission != null&&type==1) {
-                ArrayList<Element> elements = mission.getSource();
-                for (Element mutilMedia : elements) {
-                    Log.d(TAG, "mutilMedia:" + mutilMedia);
-                    if (mutilMedia.getType() == 1) {
-                        File file = new File(mFileMovies.getAbsolutePath(),mutilMedia.getName());
-                        if (file.exists()) {
-                            Log.d(TAG, file.getName()+" 删除");
-                            file.delete();
-                        }
-                    } else if (mutilMedia.getType() == 2) {
-                        File file = new File(mFilePicture.getAbsolutePath(),mutilMedia.getName());
-                        Log.d(TAG, file.getName()+" 删除");
-                        file.delete();
-                    }
-                }
-                mMissions.remove(missionId);
-            } else if (mission != null && type == 0) {
-//                设为停止状态
-                mission.setType(0);
-            }
-            scheduleMutilMedia();
-        }
-
-        @Override
-        public void handleNewMission(Mission mission) {
-//            更新播单
-            mMissions.put(mission.getMissionid(), mission);
-//           通知下载
-            DownLoadService.startService(mission.getSource());
-        }
-
-        @Override
-        public void SynMissions(List<Mission> missions) {
-            Log.d(TAG, "SynMissions: ");
+    /**
+     * 与服务器同步本地宣教信息 在应用启动的时候，后台会发送
+     * 根据宣教播放时间段不同存储不同字段
+     * 存储的时间是决定播放的关键
+     *
+     * @param receive
+     */
+    public void synVideoMissions(String receive) {
+        Log.d(TAG, "synVideoMissions: ");
+        try {
+            Missions missions = new Gson().fromJson(receive, Missions.class);
+            List<Mission> missionList = missions.getData();
             //一般启动联网时调用，此时为空 不需要清空 防止中途调用
             mMissions.clear();
 //            所有要下载的元素
             ArrayList<Element> elements = new ArrayList<>();
 //            分类保存在内存中
-            for (Mission mission : missions) {
-                mMissions.put(mission.getMissionid(),mission);
+            for (Mission mission : missionList) {
+                mMissions.put(mission.getMissionid(), mission);
                 elements.addAll(mission.getSource());
             }
 //           空集合也要通知后台下载 然后在BrocastReciver中等待下载完成通知
             DownLoadService.startService(elements);
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
         }
-    };
-
-    public interface OnMutilMediaListener {
-
-        /**
-         * 停止或删除单个播单
-         * @param type 0_暂停，1_删除
-         * @param missionId 播单Id
-         */
-        void invalidateMission(int type,int missionId);
-
-        /**
-         * 发布单个播单
-         * @param mission 播单Id
-         */
-        void handleNewMission(Mission mission);
-
-        /**
-         * 处理与服务器的同步
-         * @param missions
-         */
-        void SynMissions(List<Mission> missions);
-
     }
- /*switch (action) {
-                //后台每分钟检索一次多媒体信息
-                case SCAN_MEDIA:
-                    String param = intent.getStringExtra("param");
-                    if (TextUtils.isEmpty(param)) {
-                        //非宣教视频阶段，切换到门口屏
-                        if (isMediaPlaying) {
-                            isMediaPlaying = false;
-                            mViewPager.setCurrentItem(0, true);
-                        }
 
-                    } else {
-                        isMediaPlaying = true;
-                        if (!isCalling) {
-                            Log.d(TAG, "is not calling ,switch to media fragment");
-                            mViewPager.setCurrentItem(1, true);
-                        } else {
-                            Log.d(TAG, "is  calling ,just to update media fragment");
-                        }
-                        mMediaFragment.updateMedia(param);
-                    }
+    /**
+     * 处理单个视频宣教信息  0_暂停，1_删除，2_发布宣教内容
+     * 类型是发布需要先下载，完成后再通知Frament更新数据 重新检索
+     * 暂停通知Fragment更新数据 重新检索
+     * 停止 删除文件后通知Fragment更新数据 重新检索
+     * 因为可能多个播单共享一个视频 ，删除后其他播单不能使用 所以相关Fragment添加播放列表时需要判断本地文件是否存在
+     * Mission 是用来统一单个播单和多个播单的封装类
+     *
+     * @param receive 后台发来的播单数据
+     */
+    public void handleSingleVideoMission(String receive) {
+        try {
+            MissionInfo missionInfo = new Gson().fromJson(receive, MissionInfo.class);
+            int missionid = missionInfo.getMissionid();
+            int type = missionInfo.getType();
+            switch (missionInfo.getType()) {
+                case 0:
+                case 1:
+                    invalidateMission(type, missionid);
                     break;
+                case 2:
+                    Mission mission = missionInfo.getData();
+                    mission.setMissionid(missionid);
+                    mission.setType(type);
+                    //            更新播单
+                    mMissions.put(mission.getMissionid(), mission);
+                    // 通知下载
+                    DownLoadService.startService(mission.getSource());
+                    break;
+            }
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+        }
+    }
 
-            }*/
+    /**
+     * 停止或删除单个播单
+     *
+     * @param type      0_暂停，1_删除
+     * @param missionId 播单Id
+     */
+    private void invalidateMission(int type, int missionId) {
+        //type 0 停止  1-删除 删除之前必须先停止
+        Mission mission = mMissions.get(missionId);
+        Log.d(TAG, "mission:" + mission);
+        if (mission != null && type == 1) {
+            ArrayList<Element> elements = mission.getSource();
+            for (Element mutilMedia : elements) {
+                Log.d(TAG, "mutilMedia:" + mutilMedia);
+                if (mutilMedia.getType() == 1) {
+                    File file = new File(mFileMovies.getAbsolutePath(), mutilMedia.getName());
+                    if (file.exists()) {
+                        Log.d(TAG, file.getName() + " 删除");
+                        file.delete();
+                    }
+                } else if (mutilMedia.getType() == 2) {
+                    File file = new File(mFilePicture.getAbsolutePath(), mutilMedia.getName());
+                    Log.d(TAG, file.getName() + " 删除");
+                    file.delete();
+                }
+            }
+            mMissions.remove(missionId);
+        } else if (mission != null && type == 0) {
+//                设为停止状态
+            mission.setType(0);
+        }
+        scheduleMutilMedia();
+    }
+
 
 }

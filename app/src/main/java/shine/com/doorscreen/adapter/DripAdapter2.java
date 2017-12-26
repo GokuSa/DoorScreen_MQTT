@@ -21,7 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import shine.com.doorscreen.R;
 import shine.com.doorscreen.databinding.ItemDripBinding;
-import shine.com.doorscreen.mqtt.bean.Infusion;
+import shine.com.doorscreen.entity.Infusion;
 
 /**
  * Created by Administrator on 2016/8/16.
