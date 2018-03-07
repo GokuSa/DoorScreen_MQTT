@@ -48,6 +48,14 @@ import shine.com.doorscreen.service.DoorService;
  * 使用DoorFragment 展示住院相关信息为主页面，有输液信息优先展示，没有显示医生信息
  * 使用MediaFragment 播放视频，收到后台插播的宣教切换到此页面，在播放过程中如果有呼叫切回输液界面
  * <p>
+ *
+ * 门口屏是呼叫系统中用于显示病房中病人和医护人员信息的显示屏，需要能定时开关机、开关屏、重启、调节音量，
+ * 动态显示病人输液信息和呼叫状态，分时段播放跑马灯和宣教视频。使用MQTT实现与服务端和其他设备的通信交互，能断线自动重连。
+ * 使用Room提高Sqlite数据库操作效率，配合ViewModel监听数据库变动更新UI，使用Data Binding减少布局和应用逻辑之间的胶水代码。
+ * 其他设备的开关机等操作的实现方式是每分钟与当前时间比较一次，我采用Service+HandlerThread+Handler,
+ * 利用Handler延时消息将时间复杂度降到O（1）；使用TextSwitch实现输液时间的倒计时动画，平移动画实现水滴效果；使用OverScroller实现自定义跑马灯。
+ * 此应用的难点是没有人机交互，而需要根据服务端的设置按时显示不同状态，同时根据优先级来切换。最终设计是通过ViewPager+Fragment将视频宣教和病房信息分离，
+ * 视频宣教中使用ViewSwitch实现视频播放和图片轮播的切换，根据服务端设置的时间点请求显示，由主页面调度，能灵活流畅的按时切换，动态交互。
  */
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";

@@ -40,6 +40,8 @@ import static shine.com.doorscreen.activity.MainActivity.INTERNET_RECOVERY;
  * <p>
  * <p>
  * 统一信息处理方式，在HandlerThread 的子线程处理
+ * 主要处理与MQTT的通信 上下线  订阅 退出等
+ *
  */
 
 public class MQTTClient {
@@ -165,8 +167,8 @@ public class MQTTClient {
      */
     private MqttConnectOptions getMqttConnectOptions() {
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
-//        mqttConnectOptions.setAutomaticReconnect(false);
-        mqttConnectOptions.setAutomaticReconnect(true);
+        mqttConnectOptions.setAutomaticReconnect(false);
+//        mqttConnectOptions.setAutomaticReconnect(true);
         mqttConnectOptions.setConnectionTimeout(30);
         mqttConnectOptions.setKeepAliveInterval(60);
         mqttConnectOptions.setCleanSession(true);
@@ -210,7 +212,7 @@ public class MQTTClient {
             }
             showDialog();
             //最终调用本类的connect（）方法
-//            mMessageProcessor.handleConnect(8000);
+            mMessageProcessor.handleConnect(8000);
         }
     };
 
@@ -233,7 +235,7 @@ public class MQTTClient {
         public void connectionLost(Throwable cause) {
             Log.d(TAG, "The Connection was lost. " + mqttAndroidClient.isConnected());
             showDialog();
-//            mMessageProcessor.handleConnect(0);
+            mMessageProcessor.handleConnect(0);
         }
 
         @Override

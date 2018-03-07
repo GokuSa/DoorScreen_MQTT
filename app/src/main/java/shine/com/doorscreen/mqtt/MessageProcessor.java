@@ -63,7 +63,8 @@ import static shine.com.doorscreen.util.Common.getMacAddress;
  * author:
  * 时间:2017/12/20
  * qq:1220289215
- * 类描述：
+ * 类描述：处理后台发来的信息
+ *
  */
 
 public class MessageProcessor {
@@ -195,7 +196,9 @@ public class MessageProcessor {
                 case "call":
                 case "position":
                     DoorLightHelper.DoorLightType doorLightType2 = getDoorLightType(action, jsonObject);
-                    handleCall(doorLightType2);
+                    if (doorLightType2 != null) {
+                        handleCall(doorLightType2);
+                    }
                     break;
                 case "finish":
                 case "cancelposition":
